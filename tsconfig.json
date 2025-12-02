@@ -5,6 +5,11 @@
     { "path": "./tsconfig.cloudflare.json" }
   ],
   "compilerOptions": {
+    "baseUrl": ".",
+    "rootDirs": [".", "./.react-router/types"],
+    "paths": {
+      "~/*": ["./app/*"]
+    },
     "checkJs": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
