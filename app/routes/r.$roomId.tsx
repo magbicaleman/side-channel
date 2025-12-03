@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+
 import { useEffect, useState } from "react";
+import { useWebRTC } from "~/hooks/useWebRTC";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -37,18 +38,25 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   }, { headers });
 }
 
-export default function Room() {
-  const { roomId, clientId, websocketUrl } = useLoaderData<typeof loader>();
+export default function Room({ loaderData }: Route.ComponentProps) {
+  const { roomId, clientId, websocketUrl } = loaderData as { 
+    roomId: string; 
+    clientId: string; 
+    websocketUrl: string; 
+  };
   const [status, setStatus] = useState("Disconnected");
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
 
+  // Initialize WebSocket
   useEffect(() => {
     if (!websocketUrl) return;
 
     const ws = new WebSocket(websocketUrl);
+    setSocket(ws);
 
     ws.onopen = () => {
       setStatus("Connected");
-      // Send join message
       ws.send(JSON.stringify({
         type: "join",
         clientId: clientId
@@ -69,13 +77,80 @@ export default function Room() {
     };
   }, [websocketUrl, clientId]);
 
+  // Initialize WebRTC
+  const { localStream, peers, toggleMute } = useWebRTC({
+    roomId,
+    socket,
+    clientId,
+  });
+
+  const handleMuteToggle = () => {
+    const muted = toggleMute();
+    setIsMuted(muted);
+  };
+
   return (
     <div className="p-8 space-y-4">
       <h1 className="text-2xl font-bold">Room: {roomId}</h1>
-      <div className="p-4 border rounded-lg bg-card text-card-foreground">
-        <p><strong>Status:</strong> {status}</p>
-        <p><strong>Your Client ID:</strong> {clientId}</p>
-        <p className="text-xs text-muted-foreground mt-2">WebSocket URL: {websocketUrl}</p>
+      
+      <div className="p-4 border rounded-lg bg-card text-card-foreground space-y-2">
+        <div className="flex items-center justify-between">
+          <div>
+            <p><strong>Status:</strong> {status}</p>
+            <p><strong>Your Client ID:</strong> {clientId}</p>
+            <p className="text-xs text-muted-foreground mt-1">WebSocket URL: {websocketUrl}</p>
+          </div>
+          <button
+            onClick={handleMuteToggle}
+            className={`px-4 py-2 rounded-md font-medium transition-colors ${
+              isMuted 
+                ? "bg-red-100 text-red-900 hover:bg-red-200" 
+                : "bg-green-100 text-green-900 hover:bg-green-200"
+            }`}
+          >
+            {isMuted ? "Unmute Mic" : "Mute Mic"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {/* Local Feed (Muted) */}
+        <div className="border rounded-lg p-4 bg-muted/50">
+          <h3 className="font-semibold mb-2">You ({clientId?.slice(0, 8)})</h3>
+          {localStream ? (
+            <video
+              ref={(video) => {
+                if (video) video.srcObject = localStream;
+              }}
+              autoPlay
+              muted
+              playsInline
+              className="w-full h-32 bg-black rounded-md object-cover"
+            />
+          ) : (
+            <div className="w-full h-32 bg-gray-200 rounded-md flex items-center justify-center">
+              <span className="text-sm text-gray-500">Loading Camera...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Remote Peers */}
+        {peers.map(([peerId, stream]) => (
+          <div key={peerId} className="border rounded-lg p-4">
+            <h3 className="font-semibold mb-2">Peer ({peerId.slice(0, 8)})</h3>
+            <audio
+              ref={(audio) => {
+                if (audio) audio.srcObject = stream;
+              }}
+              autoPlay
+              playsInline
+              controls // Optional: for debugging
+            />
+            <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
+              <span className="text-2xl">👤</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
