@@ -26,9 +26,12 @@ type Message = z.infer<typeof MessageSchema>;
 
 export class SignalingServer extends DurableObject {
   // Map<ClientId, WebSocket>
-  private sessions: Map<string, WebSocket> = new Map();
+  private sessions: Map<string, { ws: WebSocket; connectionId: string }> = new Map();
   // Track current mute state so new users can learn existing statuses
   private muteStates: Map<string, boolean> = new Map();
+  private rateLimits: Map<string, { count: number; windowStart: number }> = new Map();
+  private static readonly RATE_LIMIT_WINDOW_MS = 10_000;
+  private static readonly RATE_LIMIT_MAX = 80;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -44,6 +47,28 @@ export class SignalingServer extends DurableObject {
     const upgradeHeader = request.headers.get("Upgrade");
     if (!upgradeHeader || upgradeHeader !== "websocket") {
       return new Response("Expected Upgrade: websocket", { status: 426 });
+    }
+
+    const url = new URL(request.url);
+    const origin = request.headers.get("Origin");
+    const forwardedProto = request.headers.get("X-Forwarded-Proto");
+    const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+
+    if (!isLocal) {
+      const proto = forwardedProto ?? url.protocol.replace(":", "");
+      if (proto !== "https") {
+        return new Response("HTTPS required", { status: 400 });
+      }
+      if (origin) {
+        try {
+          const originHost = new URL(origin).host;
+          if (originHost !== url.host) {
+            return new Response("Origin not allowed", { status: 403 });
+          }
+        } catch {
+          return new Response("Invalid origin", { status: 403 });
+        }
+      }
     }
 
     const webSocketPair = new WebSocketPair();
@@ -62,6 +87,7 @@ export class SignalingServer extends DurableObject {
     
     // We don't know the clientId yet. We'll wait for the 'join' message.
     let clientId: string | null = null;
+    const connectionId = crypto.randomUUID();
 
     ws.addEventListener("message", async (event) => {
       try {
@@ -80,16 +106,31 @@ export class SignalingServer extends DurableObject {
 
         if (message.type === "join") {
           clientId = message.clientId;
-          this.sessions.set(clientId, ws);
+          const existing = this.sessions.get(clientId);
+          if (existing) {
+            ws.send(JSON.stringify({ type: "error", reason: "client-id-in-use" }));
+            ws.close(4409, "client-id-in-use");
+            return;
+          }
+
+          this.sessions.set(clientId, { ws, connectionId });
           this.broadcastUserJoined(clientId);
           console.log(`User joined: ${clientId}`);
           this.sendExistingMuteStates(ws);
         } else if (["offer", "answer", "ice-candidate"].includes(message.type)) {
            // Relay message
            if ('targetClientId' in message) {
+             if (clientId && !this.consumeRateLimit(clientId)) {
+               ws.close(4410, "rate-limit");
+               return;
+             }
              this.relayMessage(message);
            }
         } else if (message.type === "mute-state") {
+          if (clientId && !this.consumeRateLimit(clientId)) {
+            ws.close(4410, "rate-limit");
+            return;
+          }
           this.muteStates.set(message.senderClientId, message.muted);
           this.broadcastMuteState(message.senderClientId, message.muted);
         }
@@ -100,34 +141,48 @@ export class SignalingServer extends DurableObject {
     });
 
     ws.addEventListener("close", () => {
-      if (clientId && this.sessions.has(clientId)) {
-        this.sessions.delete(clientId);
-        this.muteStates.delete(clientId);
-        console.log(`User disconnected: ${clientId}`);
-        this.broadcastUserLeft(clientId);
+      if (clientId) {
+        const entry = this.sessions.get(clientId);
+        if (entry && entry.connectionId === connectionId) {
+          this.sessions.delete(clientId);
+          this.muteStates.delete(clientId);
+          console.log(`User disconnected: ${clientId}`);
+          this.broadcastUserLeft(clientId);
+        }
+      }
+    });
+
+    ws.addEventListener("error", () => {
+      if (clientId) {
+        const entry = this.sessions.get(clientId);
+        if (entry && entry.connectionId === connectionId) {
+          this.sessions.delete(clientId);
+          this.muteStates.delete(clientId);
+          console.log(`User disconnected: ${clientId}`);
+          this.broadcastUserLeft(clientId);
+        }
       }
     });
   }
 
   private broadcastUserJoined(newClientId: string) {
     const message = JSON.stringify({ type: "user-joined", clientId: newClientId });
-    for (const [id, ws] of this.sessions) {
-      if (id !== newClientId) {
-        try {
-          ws.send(message);
-        } catch (e) {
-          // Handle broken connections
-          this.sessions.delete(id);
-        }
+    for (const [id, entry] of this.sessions) {
+      if (id === newClientId) continue;
+      try {
+        entry.ws.send(message);
+      } catch (e) {
+        // Handle broken connections
+        this.sessions.delete(id);
       }
     }
   }
 
   private broadcastUserLeft(clientId: string) {
     const message = JSON.stringify({ type: "user-left", clientId });
-    for (const [id, ws] of this.sessions) {
+    for (const [id, entry] of this.sessions) {
       try {
-        ws.send(message);
+        entry.ws.send(message);
       } catch (e) {
         this.sessions.delete(id);
       }
@@ -135,10 +190,10 @@ export class SignalingServer extends DurableObject {
   }
 
   private relayMessage(message: Extract<Message, { targetClientId: string }>) {
-    const targetWs = this.sessions.get(message.targetClientId);
-    if (targetWs) {
+    const target = this.sessions.get(message.targetClientId);
+    if (target) {
       try {
-        targetWs.send(JSON.stringify(message));
+        target.ws.send(JSON.stringify(message));
       } catch (e) {
         this.sessions.delete(message.targetClientId);
       }
@@ -149,10 +204,10 @@ export class SignalingServer extends DurableObject {
 
   private broadcastMuteState(senderClientId: string, muted: boolean) {
     const message = JSON.stringify({ type: "mute-state", senderClientId, muted });
-    for (const [id, ws] of this.sessions) {
+    for (const [id, entry] of this.sessions) {
       if (id === senderClientId) continue;
       try {
-        ws.send(message);
+        entry.ws.send(message);
       } catch (e) {
         this.sessions.delete(id);
       }
@@ -167,5 +222,22 @@ export class SignalingServer extends DurableObject {
         // if we fail to send, let the regular message handlers deal with cleanup
       }
     }
+  }
+
+  private consumeRateLimit(clientId: string): boolean {
+    const now = Date.now();
+    const current = this.rateLimits.get(clientId);
+    if (!current || now - current.windowStart > SignalingServer.RATE_LIMIT_WINDOW_MS) {
+      this.rateLimits.set(clientId, { count: 1, windowStart: now });
+      return true;
+    }
+
+    if (current.count >= SignalingServer.RATE_LIMIT_MAX) {
+      return false;
+    }
+
+    current.count += 1;
+    this.rateLimits.set(clientId, current);
+    return true;
   }
 }

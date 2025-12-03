@@ -38,12 +38,23 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   const headers = new Headers();
   if (!clientId) {
     clientId = crypto.randomUUID();
-    headers.append("Set-Cookie", `sidechannel_client_id=${clientId}; Path=/; HttpOnly; SameSite=Lax`);
+    const cookieParts = [
+      `sidechannel_client_id=${clientId}`,
+      "Path=/",
+      "HttpOnly",
+      "SameSite=Lax",
+      "Max-Age=21600", // 6 hours
+    ];
+    if (url.protocol === "https:") {
+      cookieParts.push("Secure");
+    }
+    headers.append("Set-Cookie", cookieParts.join("; "));
   }
 
   // Construct WebSocket URL
   // In development, we might need to adjust this if using a different port or protocol
-  const protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const isLocal = ["localhost", "127.0.0.1"].includes(url.hostname);
+  const protocol = url.protocol === "https:" || !isLocal ? "wss:" : "ws:";
   const host = url.host;
   const websocketUrl = `${protocol}//${host}/api/room/${roomId}/websocket`;
 
@@ -142,7 +153,6 @@ export default function Room({ loaderData }: Route.ComponentProps) {
           <div>
             <p><strong>Status:</strong> {status}</p>
             <p><strong>Your Client ID:</strong> {clientId}</p>
-            <p className="text-xs text-muted-foreground mt-1">WebSocket URL: {websocketUrl}</p>
             {shareMessage && (
               <p className="text-xs text-muted-foreground mt-1">{shareMessage}</p>
             )}
