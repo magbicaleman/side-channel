@@ -24,10 +24,20 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const localStreamRef = useRef<MediaStream | null>(null);
 
   // 1. Get User Media on Mount
+  // 1. Get User Media on Mount
   useEffect(() => {
+    let mounted = true;
+
     async function initMedia() {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        
+        if (!mounted) {
+          // If component unmounted while waiting for permission, stop the stream immediately
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
         localStreamRef.current = stream;
         setLocalStream(stream);
       } catch (err) {
@@ -37,6 +47,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     initMedia();
 
     return () => {
+      mounted = false;
       // Cleanup local stream
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((track) => track.stop());
