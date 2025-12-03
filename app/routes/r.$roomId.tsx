@@ -266,7 +266,6 @@ export default function Room({ loaderData }: Route.ComponentProps) {
               }}
               autoPlay
               playsInline
-              controls // Optional: for debugging
             />
             <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
               <span className="text-2xl">👤</span>
