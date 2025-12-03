@@ -20,15 +20,9 @@ export default {
     const url = new URL(request.url);
     
     // Route WebSocket requests to Durable Object
-    if (url.pathname.startsWith("/api/room/")) {
-      const match = url.pathname.match(/\/api\/room\/([^\/]+)\/websocket/);
-      if (match) {
-        const roomId = match[1];
-        const id = env.SIGNALING.idFromName(roomId);
-        const stub = env.SIGNALING.get(id);
-        return stub.fetch(request);
-      }
-    }
+    // Route WebSocket requests to Durable Object
+    // Handled by app/routes/api.room.$roomId.websocket.ts via Remix Resource Route
+
 
     return requestHandler(request, {
       cloudflare: { env, ctx },
