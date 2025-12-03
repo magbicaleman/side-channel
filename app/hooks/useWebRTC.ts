@@ -65,6 +65,9 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
           case "ice-candidate":
             handleIceCandidate(message);
             break;
+          case "user-left":
+            handleUserLeft(message.clientId);
+            break;
         }
       } catch (err) {
         console.error("Error handling signaling message:", err);
@@ -193,6 +196,24 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     }
   };
 
+  const handleUserLeft = (leftClientId: string) => {
+    console.log(`User left: ${leftClientId}`);
+    
+    // Close peer connection
+    const pc = peerConnections.current.get(leftClientId);
+    if (pc) {
+      pc.close();
+      peerConnections.current.delete(leftClientId);
+    }
+
+    // Remove from peers list
+    setPeers((prev) => {
+      const newPeers = new Map(prev);
+      newPeers.delete(leftClientId);
+      return newPeers;
+    });
+  };
+
   const toggleMute = () => {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
@@ -206,9 +227,31 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     return true;
   };
 
+  const leave = () => {
+    // 1. Close all peer connections
+    peerConnections.current.forEach((pc) => pc.close());
+    peerConnections.current.clear();
+
+    // 2. Stop local media tracks
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+    setLocalStream(null);
+
+    // 3. Close WebSocket
+    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
+      socket.close();
+    }
+
+    // 4. Reset state
+    setPeers(new Map());
+  };
+
   return {
     localStream,
     peers: Array.from(peers.entries()), // Convert Map to Array for rendering
     toggleMute,
+    leave,
   };
 }

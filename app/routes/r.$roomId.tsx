@@ -1,7 +1,8 @@
-import { type LoaderFunctionArgs } from "react-router";
+import { type LoaderFunctionArgs, useNavigate } from "react-router";
 
 import { useEffect, useState } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
+import { Button } from "~/components/ui/button";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -44,6 +45,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     clientId: string; 
     websocketUrl: string; 
   };
+  const navigate = useNavigate();
   const [status, setStatus] = useState("Disconnected");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isMuted, setIsMuted] = useState(false);
@@ -74,7 +76,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   }, [websocketUrl, clientId]);
 
   // Initialize WebRTC
-  const { localStream, peers, toggleMute } = useWebRTC({
+  const { localStream, peers, toggleMute, leave } = useWebRTC({
     roomId,
     socket,
     clientId,
@@ -83,6 +85,11 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const handleMuteToggle = () => {
     const muted = toggleMute();
     setIsMuted(muted);
+  };
+
+  const handleLeave = () => {
+    leave();
+    navigate("/");
   };
 
   return (
@@ -96,16 +103,18 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <p><strong>Your Client ID:</strong> {clientId}</p>
             <p className="text-xs text-muted-foreground mt-1">WebSocket URL: {websocketUrl}</p>
           </div>
-          <button
-            onClick={handleMuteToggle}
-            className={`px-4 py-2 rounded-md font-medium transition-colors ${
-              isMuted 
-                ? "bg-red-100 text-red-900 hover:bg-red-200" 
-                : "bg-green-100 text-green-900 hover:bg-green-200"
-            }`}
-          >
-            {isMuted ? "Unmute Mic" : "Mute Mic"}
-          </button>
+          <div className="flex gap-2">
+            <Button
+              variant={isMuted ? "destructive" : "secondary"}
+              size="sm"
+              onClick={handleMuteToggle}
+            >
+              {isMuted ? "Unmute Mic" : "Mute Mic"}
+            </Button>
+            <Button variant="destructive" size="sm" onClick={handleLeave}>
+              Leave Room
+            </Button>
+          </div>
         </div>
       </div>
 

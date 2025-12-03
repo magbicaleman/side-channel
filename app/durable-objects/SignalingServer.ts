@@ -91,7 +91,7 @@ export class SignalingServer extends DurableObject {
       if (clientId && this.sessions.has(clientId)) {
         this.sessions.delete(clientId);
         console.log(`User disconnected: ${clientId}`);
-        // Optionally broadcast 'leave' if needed, but not strictly required for MVP
+        this.broadcastUserLeft(clientId);
       }
     });
   }
@@ -106,6 +106,17 @@ export class SignalingServer extends DurableObject {
           // Handle broken connections
           this.sessions.delete(id);
         }
+      }
+    }
+  }
+
+  private broadcastUserLeft(clientId: string) {
+    const message = JSON.stringify({ type: "user-left", clientId });
+    for (const [id, ws] of this.sessions) {
+      try {
+        ws.send(message);
+      } catch (e) {
+        this.sessions.delete(id);
       }
     }
   }
