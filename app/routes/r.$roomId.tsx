@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Settings, Mic, MicOff } from "lucide-react";
+import { Settings, Mic, MicOff, Share2 } from "lucide-react";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -64,6 +64,8 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const [status, setStatus] = useState("Disconnected");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [canShare, setCanShare] = useState(false);
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   // Initialize WebSocket
   useEffect(() => {
@@ -107,6 +109,28 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     navigate("/");
   };
 
+  useEffect(() => {
+    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
+
+  const handleShare = async () => {
+    if (!canShare) return;
+    setShareMessage(null);
+    try {
+      await navigator.share({
+        title: `Join my room: ${roomId}`,
+        text: "Hop into this Side Channel room",
+        url: window.location.href,
+      });
+      setShareMessage("Shared successfully");
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : "Unable to share";
+      // AbortError when user cancels; avoid noisy message
+      if (errMsg.toLowerCase().includes("abort")) return;
+      setShareMessage(errMsg);
+    }
+  };
+
   const selectedDeviceLabel = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label || "Default Microphone";
 
   return (
@@ -119,8 +143,20 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <p><strong>Status:</strong> {status}</p>
             <p><strong>Your Client ID:</strong> {clientId}</p>
             <p className="text-xs text-muted-foreground mt-1">WebSocket URL: {websocketUrl}</p>
+            {shareMessage && (
+              <p className="text-xs text-muted-foreground mt-1">{shareMessage}</p>
+            )}
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleShare}
+              disabled={!canShare}
+            >
+              <Share2 className="h-4 w-4 mr-2" />
+              Share Room
+            </Button>
             <Button
               variant={isMuted ? "destructive" : "secondary"}
               size="sm"
