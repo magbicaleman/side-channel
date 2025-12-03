@@ -57,10 +57,6 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
     ws.onopen = () => {
       setStatus("Connected");
-      ws.send(JSON.stringify({
-        type: "join",
-        clientId: clientId
-      }));
     };
 
     ws.onclose = () => {

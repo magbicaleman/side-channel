@@ -73,6 +73,18 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
 
     socket.addEventListener("message", handleMessage);
 
+    // Send join message when ready
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "join", clientId }));
+    } else {
+      const handleOpen = () => {
+        socket.send(JSON.stringify({ type: "join", clientId }));
+        socket.removeEventListener("open", handleOpen);
+      };
+      socket.addEventListener("open", handleOpen);
+    }
+
+
     return () => {
       socket.removeEventListener("message", handleMessage);
       // Cleanup peer connections on unmount or socket change
