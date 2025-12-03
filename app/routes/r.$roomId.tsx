@@ -104,7 +104,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   }, [websocketUrl, clientId]);
 
   // Initialize WebRTC
-  const { localStream, peers, setPeerVolume, toggleMute, leave, audioDevices, selectedDeviceId, switchDevice } = useWebRTC({
+  const { localStream, peers, peerHealth, isLocalSpeaking, enhancedAudio, toggleEnhancedAudio, setPeerVolume, toggleMute, leave, audioDevices, selectedDeviceId, switchDevice } = useWebRTC({
     roomId,
     socket,
     clientId,
@@ -158,6 +158,13 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             )}
           </div>
           <div className="flex gap-2">
+            <Button
+              variant={enhancedAudio ? "secondary" : "outline"}
+              size="sm"
+              onClick={toggleEnhancedAudio}
+            >
+              {enhancedAudio ? "Enhanced Audio: On" : "Enhanced Audio: Off"}
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -218,7 +225,11 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Local Feed (Muted) */}
-        <div className="border rounded-lg p-4 bg-muted/50">
+        <div
+          className={`border rounded-lg p-4 bg-muted/50 transition-all ${
+            isLocalSpeaking && !isMuted ? "ring-2 ring-amber-500 shadow-[0_0_0_4px_rgba(251,191,36,0.25)]" : ""
+          }`}
+        >
           <h3 className="font-semibold mb-2">You ({clientId?.slice(0, 8)})</h3>
           {localStream ? (
             <video
@@ -238,12 +249,38 @@ export default function Room({ loaderData }: Route.ComponentProps) {
           <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
             <Mic className="h-3 w-3" />
             {selectedDeviceLabel}
+            <span className="ml-auto flex items-center gap-1">
+              {isLocalSpeaking && !isMuted ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                  Speaking
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                  Idle
+                </>
+              )}
+            </span>
           </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Enhanced audio {enhancedAudio ? "on" : "off"} (noise suppression, echo cancellation)
+          </p>
         </div>
 
         {/* Remote Peers */}
         {peers.map(([peerId, peerInfo]) => {
           const isSpeaking = peerInfo.speaking && !peerInfo.muted;
+          const health = peerHealth.get(peerId);
+          const healthText = health
+            ? `${health.rttMs ? Math.round(health.rttMs) + "ms" : "—"} • ${health.lossPercent !== undefined ? `${health.lossPercent.toFixed(1)}% loss` : "—"}`
+            : "Measuring…";
+          const tip =
+            health?.quality === "bad"
+              ? "Network unstable — try wired or move closer to Wi‑Fi"
+              : health?.quality === "degraded"
+              ? "Mild network issues — close heavy apps or pause uploads"
+              : null;
           return (
             <div
               key={peerId}
@@ -297,6 +334,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                     aria-label={`Adjust volume for ${peerId.slice(0, 8)}`}
                   />
                 </label>
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between gap-2">
+                <span>{healthText}</span>
+                {tip && <span className="text-amber-600">{tip}</span>}
               </div>
               <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
                 <span className="text-2xl">👤</span>
