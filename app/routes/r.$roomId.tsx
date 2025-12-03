@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Settings } from "lucide-react";
+import { Settings, Mic } from "lucide-react";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -107,6 +107,8 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     navigate("/");
   };
 
+  const selectedDeviceLabel = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label || "Default Microphone";
+
   return (
     <div className="p-8 space-y-4">
       <h1 className="text-2xl font-bold">Room: {roomId}</h1>
@@ -187,6 +189,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
               <span className="text-sm text-gray-500">Loading Camera...</span>
             </div>
           )}
+          <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+            <Mic className="h-3 w-3" />
+            {selectedDeviceLabel}
+          </div>
         </div>
 
         {/* Remote Peers */}
