@@ -26,5 +26,38 @@ trigger: always_on
 - Use **Lucide React** (`lucide-react`) for all icons.
 - Example: `import { Bell } from "lucide-react";`
 
-## Framework Specifics (Remix)
-- Use the `<Link>` component from `@remix-run/react` for internal navigation.
+## Framework Standards (React Router v7)
+
+### Routing Configuration
+- **Config File:** All routes must be defined in `app/routes.ts` using the `route`, `index`, and `layout` helpers.
+- **Pattern:** Do not rely on file-system routing magic. Explicitly map URLs to file paths.
+- **Example:**
+  ```typescript
+  import { type RouteConfig, index, route } from "@react-router/dev/routes";
+
+  export default [
+    index("routes/_index.tsx"),
+    route("r/:roomId", "routes/r.$roomId.tsx"),
+  ] satisfies RouteConfig;
+  ```
+
+### Type Safety & Data Loading
+- **Auto-Generated Types:** ALWAYS use the v7 auto-generated types for props and loader arguments.
+- **Import Pattern:** `import type { Route } from "./+types/[filename]";`
+- **Component Definition:**
+  ```typescript
+  export default function MyRoute({ loaderData }: Route.ComponentProps) { ... }
+  ```
+- **Loader Definition:**
+  ```typescript
+  export async function loader({ params }: Route.LoaderArgs) { ... }
+  ```
+- **Return Values:** Return raw objects from loaders/actions. Do not use the deprecated `json()` wrapper.
+
+### Meta & Headers
+- **Meta Tags:** Use React 19 standard `<title>` and `<meta>` tags directly inside the JSX of the component.
+- **Prohibited:** Do NOT use the legacy `export const meta` function unless absolutely necessary.
+
+### Data Mutation
+- Use `<Form>` for simple mutations that redirect.
+- Use `useFetcher` for mutations that update UI in place without navigation (like "Like" buttons).
