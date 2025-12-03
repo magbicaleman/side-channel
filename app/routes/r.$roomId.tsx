@@ -104,7 +104,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   }, [websocketUrl, clientId]);
 
   // Initialize WebRTC
-  const { localStream, peers, toggleMute, leave, audioDevices, selectedDeviceId, switchDevice } = useWebRTC({
+  const { localStream, peers, setPeerVolume, toggleMute, leave, audioDevices, selectedDeviceId, switchDevice } = useWebRTC({
     roomId,
     socket,
     clientId,
@@ -274,11 +274,30 @@ export default function Room({ loaderData }: Route.ComponentProps) {
               </div>
               <audio
                 ref={(audio) => {
-                  if (audio) audio.srcObject = peerInfo.stream ?? null;
+                  if (audio) {
+                    audio.srcObject = peerInfo.stream ?? null;
+                    // HTMLMediaElement volume caps at 1; clamp to avoid errors
+                    audio.volume = Math.min(1, Math.max(0, peerInfo.volume ?? 1));
+                  }
                 }}
                 autoPlay
                 playsInline
               />
+              <div className="mt-2">
+                <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  Volume
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={peerInfo.volume ?? 1}
+                    onChange={(e) => setPeerVolume(peerId, Number(e.target.value))}
+                    className="w-full accent-amber-500"
+                    aria-label={`Adjust volume for ${peerId.slice(0, 8)}`}
+                  />
+                </label>
+              </div>
               <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
                 <span className="text-2xl">👤</span>
               </div>

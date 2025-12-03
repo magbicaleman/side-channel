@@ -18,6 +18,7 @@ type PeerInfo = {
   stream: MediaStream | null;
   muted: boolean;
   speaking: boolean;
+  volume: number;
 };
 
 export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
@@ -31,6 +32,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const lastBroadcastMuteState = useRef<boolean | null>(null);
+  const joinedRef = useRef(false);
   const audioMonitors = useRef<
     Map<
       string,
@@ -50,7 +52,15 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
 
     async function initMedia() {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+            sampleRate: 48000,
+          },
+        });
         
         if (!mounted) {
           // If component unmounted while waiting for permission, stop the stream immediately
@@ -88,8 +98,17 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   }, []);
 
   // 2. Handle WebSocket Signaling
+  const attemptJoin = () => {
+    if (!socket || !clientId || joinedRef.current) return;
+    if (!localStreamRef.current) return;
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "join", clientId }));
+      joinedRef.current = true;
+    }
+  };
+
   useEffect(() => {
-    if (!socket || !clientId || !localStream) return;
+    if (!socket || !clientId) return;
 
     const handleMessage = async (event: MessageEvent) => {
       try {
@@ -122,27 +141,29 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
 
     socket.addEventListener("message", handleMessage);
 
-    // Send join message when ready
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "join", clientId }));
-    } else {
-      const handleOpen = () => {
-        socket.send(JSON.stringify({ type: "join", clientId }));
-        socket.removeEventListener("open", handleOpen);
-      };
-      socket.addEventListener("open", handleOpen);
-    }
+    const handleOpen = () => {
+      attemptJoin();
+    };
+    socket.addEventListener("open", handleOpen);
 
+    attemptJoin();
 
     return () => {
       socket.removeEventListener("message", handleMessage);
+      socket.removeEventListener("open", handleOpen);
       // Cleanup peer connections on unmount or socket change
       peerConnections.current.forEach((pc) => pc.close());
       peerConnections.current.clear();
       stopAllMonitoring();
       setPeers(new Map());
+      joinedRef.current = false;
     };
-  }, [socket, clientId, localStream]); // Re-run if socket/clientId/stream changes
+  }, [socket, clientId]); // Re-run if socket/clientId changes
+
+  // If we get a local stream after socket is ready, try joining once.
+  useEffect(() => {
+    attemptJoin();
+  }, [localStream]);
 
   // --- WebRTC Logic ---
   const sendMuteState = (muted: boolean) => {
@@ -204,7 +225,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       setPeers((prev) => {
         const newPeers = new Map(prev);
         const existing = newPeers.get(targetClientId);
-        newPeers.set(targetClientId, { stream: remoteStream, muted: existing?.muted ?? false, speaking: false });
+        newPeers.set(targetClientId, { stream: remoteStream, muted: existing?.muted ?? false, speaking: false, volume: existing?.volume ?? 1 });
         return newPeers;
       });
       startMonitoringLevel(targetClientId, remoteStream);
@@ -301,13 +322,14 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     }
   }
   return true;
-};
+  };
 
   const leave = () => {
     // 1. Close all peer connections
     peerConnections.current.forEach((pc) => pc.close());
     peerConnections.current.clear();
     stopAllMonitoring();
+    joinedRef.current = false;
 
     // 2. Stop local media tracks
     if (localStreamRef.current) {
@@ -387,7 +409,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     setPeers((prev) => {
       const newPeers = new Map(prev);
       const existing = newPeers.get(peerId);
-      newPeers.set(peerId, { stream: existing?.stream ?? null, muted, speaking: false });
+      newPeers.set(peerId, { stream: existing?.stream ?? null, muted, speaking: false, volume: existing?.volume ?? 1 });
       return newPeers;
     });
   };
@@ -447,9 +469,22 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     Array.from(audioMonitors.current.keys()).forEach(stopMonitoringLevel);
   };
 
+  const setPeerVolume = (peerId: string, volume: number) => {
+    const clamped = Math.min(1, Math.max(0, volume));
+    setPeers((prev) => {
+      const next = new Map(prev);
+      const existing = next.get(peerId);
+      if (existing) {
+        next.set(peerId, { ...existing, volume: clamped });
+      }
+      return next;
+    });
+  };
+
   return {
     localStream,
     peers: Array.from(peers.entries()), // Convert Map to Array for rendering
+    setPeerVolume,
     toggleMute,
     leave,
     audioDevices,
