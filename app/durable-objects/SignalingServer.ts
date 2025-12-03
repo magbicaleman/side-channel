@@ -7,6 +7,12 @@ const JoinSchema = z.object({
   clientId: z.string(),
 });
 
+const MuteStateSchema = z.object({
+  type: z.literal("mute-state"),
+  muted: z.boolean(),
+  senderClientId: z.string(),
+});
+
 const SignalSchema = z.object({
   type: z.enum(["offer", "answer", "ice-candidate"]),
   targetClientId: z.string(),
@@ -14,13 +20,15 @@ const SignalSchema = z.object({
   senderClientId: z.string(),
 });
 
-const MessageSchema = z.union([JoinSchema, SignalSchema]);
+const MessageSchema = z.union([JoinSchema, SignalSchema, MuteStateSchema]);
 
 type Message = z.infer<typeof MessageSchema>;
 
 export class SignalingServer extends DurableObject {
   // Map<ClientId, WebSocket>
   private sessions: Map<string, WebSocket> = new Map();
+  // Track current mute state so new users can learn existing statuses
+  private muteStates: Map<string, boolean> = new Map();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -75,11 +83,15 @@ export class SignalingServer extends DurableObject {
           this.sessions.set(clientId, ws);
           this.broadcastUserJoined(clientId);
           console.log(`User joined: ${clientId}`);
+          this.sendExistingMuteStates(ws);
         } else if (["offer", "answer", "ice-candidate"].includes(message.type)) {
            // Relay message
            if ('targetClientId' in message) {
              this.relayMessage(message);
            }
+        } else if (message.type === "mute-state") {
+          this.muteStates.set(message.senderClientId, message.muted);
+          this.broadcastMuteState(message.senderClientId, message.muted);
         }
 
       } catch (err) {
@@ -90,6 +102,7 @@ export class SignalingServer extends DurableObject {
     ws.addEventListener("close", () => {
       if (clientId && this.sessions.has(clientId)) {
         this.sessions.delete(clientId);
+        this.muteStates.delete(clientId);
         console.log(`User disconnected: ${clientId}`);
         this.broadcastUserLeft(clientId);
       }
@@ -131,6 +144,28 @@ export class SignalingServer extends DurableObject {
       }
     } else {
       console.warn(`Target client ${message.targetClientId} not found.`);
+    }
+  }
+
+  private broadcastMuteState(senderClientId: string, muted: boolean) {
+    const message = JSON.stringify({ type: "mute-state", senderClientId, muted });
+    for (const [id, ws] of this.sessions) {
+      if (id === senderClientId) continue;
+      try {
+        ws.send(message);
+      } catch (e) {
+        this.sessions.delete(id);
+      }
+    }
+  }
+
+  private sendExistingMuteStates(targetWs: WebSocket) {
+    for (const [id, muted] of this.muteStates) {
+      try {
+        targetWs.send(JSON.stringify({ type: "mute-state", senderClientId: id, muted }));
+      } catch (e) {
+        // if we fail to send, let the regular message handlers deal with cleanup
+      }
     }
   }
 }

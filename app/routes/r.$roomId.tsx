@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Settings, Mic } from "lucide-react";
+import { Settings, Mic, MicOff } from "lucide-react";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -196,12 +196,27 @@ export default function Room({ loaderData }: Route.ComponentProps) {
         </div>
 
         {/* Remote Peers */}
-        {peers.map(([peerId, stream]) => (
+        {peers.map(([peerId, peerInfo]) => (
           <div key={peerId} className="border rounded-lg p-4">
-            <h3 className="font-semibold mb-2">Peer ({peerId.slice(0, 8)})</h3>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Peer ({peerId.slice(0, 8)})</h3>
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                {peerInfo.muted ? (
+                  <>
+                    <MicOff className="h-3 w-3 text-destructive" />
+                    Muted
+                  </>
+                ) : (
+                  <>
+                    <Mic className="h-3 w-3" />
+                    Live
+                  </>
+                )}
+              </span>
+            </div>
             <audio
               ref={(audio) => {
-                if (audio) audio.srcObject = stream;
+                if (audio) audio.srcObject = peerInfo.stream ?? null;
               }}
               autoPlay
               playsInline

@@ -14,16 +14,22 @@ interface UseWebRTCProps {
   clientId: string | null;
 }
 
+type PeerInfo = {
+  stream: MediaStream | null;
+  muted: boolean;
+};
+
 export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   // Map of remote clientId -> MediaStream
-  const [peers, setPeers] = useState<Map<string, MediaStream>>(new Map());
+  const [peers, setPeers] = useState<Map<string, PeerInfo>>(new Map());
   
   // Refs for mutable state that shouldn't trigger re-renders
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
+  const lastBroadcastMuteState = useRef<boolean | null>(null);
 
   // 1. Get User Media on Mount
   // 1. Get User Media on Mount
@@ -93,6 +99,9 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
           case "user-left":
             handleUserLeft(message.clientId);
             break;
+          case "mute-state":
+            updatePeerMuteState(message.senderClientId, message.muted);
+            break;
         }
       } catch (err) {
         console.error("Error handling signaling message:", err);
@@ -123,6 +132,31 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   }, [socket, clientId, localStream]); // Re-run if socket/clientId/stream changes
 
   // --- WebRTC Logic ---
+  const sendMuteState = (muted: boolean) => {
+    if (!socket || !clientId) return;
+    const payload = JSON.stringify({ type: "mute-state", senderClientId: clientId, muted });
+
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(payload);
+    } else if (socket.readyState === WebSocket.CONNECTING) {
+      const handleOpen = () => {
+        socket.send(payload);
+        socket.removeEventListener("open", handleOpen);
+      };
+      socket.addEventListener("open", handleOpen);
+    }
+  };
+
+  // Let peers know our current mute state when our stream changes (e.g. join or device switch)
+  useEffect(() => {
+    if (!localStream) return;
+    const audioTrack = localStream.getAudioTracks()[0];
+    const muted = audioTrack ? !audioTrack.enabled : false;
+    if (lastBroadcastMuteState.current !== muted) {
+      lastBroadcastMuteState.current = muted;
+      sendMuteState(muted);
+    }
+  }, [localStream, socket, clientId]);
 
   const createPeerConnection = (targetClientId: string) => {
     if (peerConnections.current.has(targetClientId)) {
@@ -156,7 +190,8 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       const remoteStream = event.streams[0];
       setPeers((prev) => {
         const newPeers = new Map(prev);
-        newPeers.set(targetClientId, remoteStream);
+        const existing = newPeers.get(targetClientId);
+        newPeers.set(targetClientId, { stream: remoteStream, muted: existing?.muted ?? false });
         return newPeers;
       });
     };
@@ -243,14 +278,15 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     if (localStreamRef.current) {
       const audioTrack = localStreamRef.current.getAudioTracks()[0];
       if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        // Force update to reflect state if needed, but track.enabled is mutable
-        // We might want to return isMuted state
-        return !audioTrack.enabled; // returns isMuted
-      }
+      audioTrack.enabled = !audioTrack.enabled;
+      const muted = !audioTrack.enabled;
+      sendMuteState(muted);
+      lastBroadcastMuteState.current = muted;
+      return muted; // returns isMuted
     }
-    return true;
-  };
+  }
+  return true;
+};
 
   const leave = () => {
     // 1. Close all peer connections
@@ -286,6 +322,8 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const switchDevice = async (deviceId: string) => {
     if (deviceId === selectedDeviceId) return;
 
+    const wasMuted = localStreamRef.current?.getAudioTracks()[0]?.enabled === false;
+
     try {
       // 1. Get new stream
       const newStream = await navigator.mediaDevices.getUserMedia({
@@ -298,6 +336,12 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       }
 
       // 3. Update local state
+      if (wasMuted) {
+        const newTrack = newStream.getAudioTracks()[0];
+        if (newTrack) {
+          newTrack.enabled = false;
+        }
+      }
       localStreamRef.current = newStream;
       setLocalStream(newStream);
       setSelectedDeviceId(deviceId);
@@ -312,9 +356,24 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
           }
         });
       }
+
+      if (wasMuted !== undefined) {
+        const muted = wasMuted ?? false;
+        lastBroadcastMuteState.current = muted;
+        sendMuteState(muted);
+      }
     } catch (err) {
       console.error("Failed to switch device:", err);
     }
+  };
+
+  const updatePeerMuteState = (peerId: string, muted: boolean) => {
+    setPeers((prev) => {
+      const newPeers = new Map(prev);
+      const existing = newPeers.get(peerId);
+      newPeers.set(peerId, { stream: existing?.stream ?? null, muted });
+      return newPeers;
+    });
   };
 
   return {
