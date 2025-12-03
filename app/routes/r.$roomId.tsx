@@ -242,36 +242,49 @@ export default function Room({ loaderData }: Route.ComponentProps) {
         </div>
 
         {/* Remote Peers */}
-        {peers.map(([peerId, peerInfo]) => (
-          <div key={peerId} className="border rounded-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold">Peer ({peerId.slice(0, 8)})</h3>
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                {peerInfo.muted ? (
-                  <>
-                    <MicOff className="h-3 w-3 text-destructive" />
-                    Muted
-                  </>
-                ) : (
-                  <>
-                    <Mic className="h-3 w-3" />
-                    Live
-                  </>
-                )}
-              </span>
+        {peers.map(([peerId, peerInfo]) => {
+          const isSpeaking = peerInfo.speaking && !peerInfo.muted;
+          return (
+            <div
+              key={peerId}
+              className={`border rounded-lg p-4 transition-all ${
+                isSpeaking ? "ring-2 ring-amber-500 shadow-[0_0_0_4px_rgba(251,191,36,0.25)]" : ""
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-semibold">Peer ({peerId.slice(0, 8)})</h3>
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  {peerInfo.muted ? (
+                    <>
+                      <MicOff className="h-3 w-3 text-destructive" />
+                      Muted
+                    </>
+                  ) : isSpeaking ? (
+                    <>
+                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                      Speaking
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-3 w-3" />
+                      Live
+                    </>
+                  )}
+                </span>
+              </div>
+              <audio
+                ref={(audio) => {
+                  if (audio) audio.srcObject = peerInfo.stream ?? null;
+                }}
+                autoPlay
+                playsInline
+              />
+              <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
+                <span className="text-2xl">👤</span>
+              </div>
             </div>
-            <audio
-              ref={(audio) => {
-                if (audio) audio.srcObject = peerInfo.stream ?? null;
-              }}
-              autoPlay
-              playsInline
-            />
-            <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
-              <span className="text-2xl">👤</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

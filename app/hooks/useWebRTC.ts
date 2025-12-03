@@ -17,6 +17,7 @@ interface UseWebRTCProps {
 type PeerInfo = {
   stream: MediaStream | null;
   muted: boolean;
+  speaking: boolean;
 };
 
 export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
@@ -30,6 +31,17 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
   const lastBroadcastMuteState = useRef<boolean | null>(null);
+  const audioMonitors = useRef<
+    Map<
+      string,
+      {
+        audioContext: AudioContext;
+        analyser: AnalyserNode;
+        source: MediaStreamAudioSourceNode;
+        rafId: number;
+      }
+    >
+  >(new Map());
 
   // 1. Get User Media on Mount
   // 1. Get User Media on Mount
@@ -127,6 +139,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       // Cleanup peer connections on unmount or socket change
       peerConnections.current.forEach((pc) => pc.close());
       peerConnections.current.clear();
+      stopAllMonitoring();
       setPeers(new Map());
     };
   }, [socket, clientId, localStream]); // Re-run if socket/clientId/stream changes
@@ -191,9 +204,10 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       setPeers((prev) => {
         const newPeers = new Map(prev);
         const existing = newPeers.get(targetClientId);
-        newPeers.set(targetClientId, { stream: remoteStream, muted: existing?.muted ?? false });
+        newPeers.set(targetClientId, { stream: remoteStream, muted: existing?.muted ?? false, speaking: false });
         return newPeers;
       });
+      startMonitoringLevel(targetClientId, remoteStream);
     };
 
     peerConnections.current.set(targetClientId, pc);
@@ -265,6 +279,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       pc.close();
       peerConnections.current.delete(leftClientId);
     }
+    stopMonitoringLevel(leftClientId);
 
     // Remove from peers list
     setPeers((prev) => {
@@ -292,6 +307,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     // 1. Close all peer connections
     peerConnections.current.forEach((pc) => pc.close());
     peerConnections.current.clear();
+    stopAllMonitoring();
 
     // 2. Stop local media tracks
     if (localStreamRef.current) {
@@ -371,9 +387,64 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     setPeers((prev) => {
       const newPeers = new Map(prev);
       const existing = newPeers.get(peerId);
-      newPeers.set(peerId, { stream: existing?.stream ?? null, muted });
+      newPeers.set(peerId, { stream: existing?.stream ?? null, muted, speaking: false });
       return newPeers;
     });
+  };
+
+  const startMonitoringLevel = (peerId: string, stream: MediaStream) => {
+    stopMonitoringLevel(peerId);
+    try {
+      const audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.fftSize);
+      const threshold = 0.04; // tweakable speech threshold
+
+      const tick = () => {
+        analyser.getByteTimeDomainData(dataArray);
+        let sumSquares = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          const v = (dataArray[i] - 128) / 128;
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / dataArray.length);
+        const speaking = rms > threshold;
+        setPeers((prev) => {
+          const updated = new Map(prev);
+          const info = updated.get(peerId);
+          if (info) {
+            updated.set(peerId, { ...info, speaking });
+          }
+          return updated;
+        });
+        const monitor = audioMonitors.current.get(peerId);
+        if (monitor) {
+          monitor.rafId = requestAnimationFrame(tick);
+        }
+      };
+
+      const rafId = requestAnimationFrame(tick);
+      audioMonitors.current.set(peerId, { audioContext, analyser, source, rafId });
+    } catch (err) {
+      console.error("Failed to start audio monitor", err);
+    }
+  };
+
+  const stopMonitoringLevel = (peerId: string) => {
+    const monitor = audioMonitors.current.get(peerId);
+    if (monitor) {
+      cancelAnimationFrame(monitor.rafId);
+      monitor.source.disconnect();
+      monitor.audioContext.close();
+      audioMonitors.current.delete(peerId);
+    }
+  };
+
+  const stopAllMonitoring = () => {
+    Array.from(audioMonitors.current.keys()).forEach(stopMonitoringLevel);
   };
 
   return {
