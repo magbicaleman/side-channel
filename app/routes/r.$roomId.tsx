@@ -3,6 +3,21 @@ import { type LoaderFunctionArgs, useNavigate } from "react-router";
 import { useEffect, useState } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
 import { Button } from "~/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Settings } from "lucide-react";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -76,7 +91,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   }, [websocketUrl, clientId]);
 
   // Initialize WebRTC
-  const { localStream, peers, toggleMute, leave } = useWebRTC({
+  const { localStream, peers, toggleMute, leave, audioDevices, selectedDeviceId, switchDevice } = useWebRTC({
     roomId,
     socket,
     clientId,
@@ -114,6 +129,41 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button variant="destructive" size="sm" onClick={handleLeave}>
               Leave Room
             </Button>
+            
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Settings className="h-4 w-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Audio Settings</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                      Microphone
+                    </label>
+                    <Select
+                      value={selectedDeviceId}
+                      onValueChange={(value) => switchDevice(value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a microphone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {audioDevices.map((device) => (
+                          <SelectItem key={device.deviceId} value={device.deviceId}>
+                            {device.label || `Microphone ${device.deviceId.slice(0, 5)}...`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </div>

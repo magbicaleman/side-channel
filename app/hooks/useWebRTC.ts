@@ -16,6 +16,8 @@ interface UseWebRTCProps {
 
 export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   // Map of remote clientId -> MediaStream
   const [peers, setPeers] = useState<Map<string, MediaStream>>(new Map());
   
@@ -40,6 +42,18 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
 
         localStreamRef.current = stream;
         setLocalStream(stream);
+
+        // Get initial device list after permission is granted
+        await getAudioDevices();
+        
+        // Set initial selected device
+        const audioTrack = stream.getAudioTracks()[0];
+        if (audioTrack) {
+          const settings = audioTrack.getSettings();
+          if (settings.deviceId) {
+            setSelectedDeviceId(settings.deviceId);
+          }
+        }
       } catch (err) {
         console.error("Failed to get user media:", err);
       }
@@ -259,10 +273,57 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     setPeers(new Map());
   };
 
+  const getAudioDevices = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const audioInputs = devices.filter((device) => device.kind === "audioinput");
+      setAudioDevices(audioInputs);
+    } catch (err) {
+      console.error("Failed to enumerate devices:", err);
+    }
+  };
+
+  const switchDevice = async (deviceId: string) => {
+    if (deviceId === selectedDeviceId) return;
+
+    try {
+      // 1. Get new stream
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId } },
+      });
+
+      // 2. Stop old tracks
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => track.stop());
+      }
+
+      // 3. Update local state
+      localStreamRef.current = newStream;
+      setLocalStream(newStream);
+      setSelectedDeviceId(deviceId);
+
+      // 4. Replace track in all peer connections
+      const newAudioTrack = newStream.getAudioTracks()[0];
+      if (newAudioTrack) {
+        peerConnections.current.forEach((pc) => {
+          const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
+          if (sender) {
+            sender.replaceTrack(newAudioTrack);
+          }
+        });
+      }
+    } catch (err) {
+      console.error("Failed to switch device:", err);
+    }
+  };
+
   return {
     localStream,
     peers: Array.from(peers.entries()), // Convert Map to Array for rendering
     toggleMute,
     leave,
+    audioDevices,
+    selectedDeviceId,
+    switchDevice,
   };
 }
