@@ -14,6 +14,8 @@ const MEDIA_CONSTRAINTS = {
     echoCancellation: true,
     noiseSuppression: true,
     autoGainControl: true,
+    // Google-specific constraint for mobile earpiece switching
+    googEchoCancellation: true,
   },
   video: false,
 };
@@ -208,6 +210,21 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   };
 
   const handleUserJoined = async (newClientId: string) => {
+    // Fix: Clean up "ghost" peers if they rejoin without sending a leave event first
+    if (peerConnections.current.has(newClientId)) {
+      console.warn(`[useWebRTC] Cleaning up ghost peer: ${newClientId}`);
+      const oldPc = peerConnections.current.get(newClientId);
+      oldPc?.close();
+      peerConnections.current.delete(newClientId);
+
+      // Force UI update to remove the dead stream immediately
+      setPeersMap((prev) => {
+        const next = new Map(prev);
+        next.delete(newClientId);
+        return next;
+      });
+    }
+
     const pc = createPeerConnection(newClientId);
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
