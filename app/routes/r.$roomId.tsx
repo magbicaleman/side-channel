@@ -28,11 +28,18 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   const cookieHeader = request.headers.get("Cookie");
   let clientId: string | null = null;
   
+  // Basic validation UUID regex (8-4-4-4-12 hex format)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   if (cookieHeader) {
     const cookies = Object.fromEntries(
-      cookieHeader.split("; ").map(c => c.split("="))
+      cookieHeader.split("; ").map((c) => c.split("="))
     );
-    clientId = cookies["sidechannel_client_id"];
+    const candidate = cookies["sidechannel_client_id"];
+    // Validate candidate before accepting
+    if (candidate && uuidRegex.test(candidate)) {
+      clientId = candidate;
+    }
   }
 
   const headers = new Headers();

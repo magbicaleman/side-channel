@@ -108,15 +108,24 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       lastBroadcastMuteState.current = muted;
       sendMuteState(muted);
 
-      // Replace track in all peer connections
+      // Replace track in all peer connections safely
       const newTrack = stream.getAudioTracks()[0];
       if (newTrack) {
+        const replacementPromises: Promise<void>[] = [];
+
         peerConnections.current.forEach((pc) => {
           const sender = pc.getSenders().find((s) => s.track?.kind === "audio");
-          if (sender) {
-            sender.replaceTrack(newTrack);
+          // Check if connection is not closed before attempting replace
+          if (sender && pc.signalingState !== "closed") {
+            const promise = sender.replaceTrack(newTrack).catch((err) => {
+              console.warn("Failed to replace track for peer:", err);
+            });
+            replacementPromises.push(promise);
           }
         });
+
+        // Wait for all replacements to settle (success or fail)
+        await Promise.allSettled(replacementPromises);
       }
     } catch (err) {
       console.error("Failed to get user media:", err);
