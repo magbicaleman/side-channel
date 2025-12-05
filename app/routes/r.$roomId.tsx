@@ -1,5 +1,4 @@
 import { type LoaderFunctionArgs, useNavigate } from "react-router";
-
 import { useEffect, useState } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
 import { Button } from "~/components/ui/button";
@@ -59,7 +58,6 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   }
 
   // Construct WebSocket URL
-  // In development, we might need to adjust this if using a different port or protocol
   const isLocal = ["localhost", "127.0.0.1"].includes(url.hostname);
   const protocol = url.protocol === "https:" || !isLocal ? "wss:" : "ws:";
   const host = url.host;
@@ -111,7 +109,15 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   }, [websocketUrl, clientId]);
 
   // Initialize WebRTC
-  const { localStream, peers, peerHealth, isLocalSpeaking, enhancedAudio, toggleEnhancedAudio, setPeerVolume, toggleMute, leave, audioDevices, selectedDeviceId, switchDevice } = useWebRTC({
+  const { 
+    localStream, 
+    peers, 
+    toggleMute, 
+    leave, 
+    audioDevices, 
+    selectedDeviceId, 
+    switchDevice 
+  } = useWebRTC({
     roomId,
     socket,
     clientId,
@@ -143,7 +149,6 @@ export default function Room({ loaderData }: Route.ComponentProps) {
       setShareMessage("Shared successfully");
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : "Unable to share";
-      // AbortError when user cancels; avoid noisy message
       if (errMsg.toLowerCase().includes("abort")) return;
       setShareMessage(errMsg);
     }
@@ -152,26 +157,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const selectedDeviceLabel = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label || "Default Microphone";
 
   return (
-    <div className="p-8 space-y-4">
-      <h1 className="text-2xl font-bold">Room: {roomId}</h1>
-      
-      <div className="p-4 border rounded-lg bg-card text-card-foreground space-y-2">
-        <div className="flex items-center justify-between">
-          <div>
-            <p><strong>Status:</strong> {status}</p>
-            <p><strong>Your Client ID:</strong> {clientId}</p>
-            {shareMessage && (
-              <p className="text-xs text-muted-foreground mt-1">{shareMessage}</p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant={enhancedAudio ? "secondary" : "outline"}
-              size="sm"
-              onClick={toggleEnhancedAudio}
-            >
-              {enhancedAudio ? "Enhanced Audio: On" : "Enhanced Audio: Off"}
-            </Button>
+    <div className="p-8 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">Room: {roomId}</h1>
+        <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
@@ -179,19 +168,8 @@ export default function Room({ loaderData }: Route.ComponentProps) {
               disabled={!canShare}
             >
               <Share2 className="h-4 w-4 mr-2" />
-              Share Room
+              Share
             </Button>
-            <Button
-              variant={isMuted ? "destructive" : "secondary"}
-              size="sm"
-              onClick={handleMuteToggle}
-            >
-              {isMuted ? "Unmute Mic" : "Mute Mic"}
-            </Button>
-            <Button variant="destructive" size="sm" onClick={handleLeave}>
-              Leave Room
-            </Button>
-            
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="outline" size="icon">
@@ -204,7 +182,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                    <label className="text-sm font-medium leading-none">
                       Microphone
                     </label>
                     <Select
@@ -226,132 +204,79 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 </div>
               </DialogContent>
             </Dialog>
-          </div>
         </div>
+      </div>
+      
+      <div className="p-4 border rounded-lg bg-card text-card-foreground">
+         <div className="flex items-center justify-between">
+           <div className="text-sm space-y-1">
+             <p><span className="text-muted-foreground mr-1">Status:</span>{status}</p>
+             <p><span className="text-muted-foreground mr-1">Client ID:</span>{clientId}</p>
+             {shareMessage && <p className="text-green-600">{shareMessage}</p>}
+           </div>
+           <div className="flex gap-2">
+             <Button
+                variant={isMuted ? "destructive" : "secondary"}
+                onClick={handleMuteToggle}
+              >
+                {isMuted ? <MicOff className="h-4 w-4 mr-2" /> : <Mic className="h-4 w-4 mr-2" />}
+                {isMuted ? "Unmute" : "Mute"}
+              </Button>
+              <Button variant="destructive" onClick={handleLeave}>
+                Leave
+              </Button>
+           </div>
+         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Local Feed (Muted) */}
-        <div
-          className={`border rounded-lg p-4 bg-muted/50 transition-all ${
-            isLocalSpeaking && !isMuted ? "ring-2 ring-amber-500 shadow-[0_0_0_4px_rgba(251,191,36,0.25)]" : ""
-          }`}
-        >
-          <h3 className="font-semibold mb-2">You ({clientId?.slice(0, 8)})</h3>
-          {localStream ? (
-            <video
-              ref={(video) => {
-                if (video) video.srcObject = localStream;
-              }}
-              autoPlay
-              muted
-              playsInline
-              className="w-full h-32 bg-black rounded-md object-cover"
-            />
-          ) : (
-            <div className="w-full h-32 bg-gray-200 rounded-md flex items-center justify-center">
-              <span className="text-sm text-gray-500">Loading Camera...</span>
-            </div>
-          )}
-          <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
-            <Mic className="h-3 w-3" />
-            {selectedDeviceLabel}
-            <span className="ml-auto flex items-center gap-1">
-              {isLocalSpeaking && !isMuted ? (
-                <>
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                  Speaking
-                </>
-              ) : (
-                <>
-                  <span className="h-2 w-2 rounded-full bg-muted-foreground" />
-                  Idle
-                </>
-              )}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Enhanced audio {enhancedAudio ? "on" : "off"} (noise suppression, echo cancellation)
-          </p>
+        {/* Local User */}
+        <div className="border rounded-lg p-6 flex flex-col items-center justify-center bg-muted/30 h-48 relative overflow-hidden">
+           <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-3">
+             <span className="text-2xl">👤</span>
+           </div>
+           <h3 className="font-semibold">You ({clientId?.slice(0, 4)})</h3>
+           <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1 max-w-full truncate px-4">
+             <Mic className="h-3 w-3 inline" /> {selectedDeviceLabel}
+           </p>
+           {isMuted && (
+             <div className="absolute top-2 right-2 bg-destructive/10 text-destructive text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+               <MicOff className="h-3 w-3" /> MUTED
+             </div>
+           )}
+           {/* Visualizer removed as requested, just simplistic state */}
         </div>
 
         {/* Remote Peers */}
-        {peers.map(([peerId, peerInfo]) => {
-          const isSpeaking = peerInfo.speaking && !peerInfo.muted;
-          const health = peerHealth.get(peerId);
-          const healthText = health
-            ? `${health.rttMs ? Math.round(health.rttMs) + "ms" : "—"} • ${health.lossPercent !== undefined ? `${health.lossPercent.toFixed(1)}% loss` : "—"}`
-            : "Measuring…";
-          const tip =
-            health?.quality === "bad"
-              ? "Network unstable — try wired or move closer to Wi‑Fi"
-              : health?.quality === "degraded"
-              ? "Mild network issues — close heavy apps or pause uploads"
-              : null;
-          return (
-            <div
-              key={peerId}
-              className={`border rounded-lg p-4 transition-all ${
-                isSpeaking ? "ring-2 ring-amber-500 shadow-[0_0_0_4px_rgba(251,191,36,0.25)]" : ""
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold">Peer ({peerId.slice(0, 8)})</h3>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  {peerInfo.muted ? (
-                    <>
-                      <MicOff className="h-3 w-3 text-destructive" />
-                      Muted
-                    </>
-                  ) : isSpeaking ? (
-                    <>
-                      <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                      Speaking
-                    </>
-                  ) : (
-                    <>
-                      <Mic className="h-3 w-3" />
-                      Live
-                    </>
-                  )}
-                </span>
-              </div>
-              <audio
-                ref={(audio) => {
-                  if (audio) {
-                    audio.srcObject = peerInfo.stream ?? null;
-                    // HTMLMediaElement volume caps at 1; clamp to avoid errors
-                    audio.volume = Math.min(1, Math.max(0, peerInfo.volume ?? 1));
-                  }
-                }}
-                autoPlay
-                playsInline
-              />
-              <div className="mt-2">
-                <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                  Volume
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={peerInfo.volume ?? 1}
-                    onChange={(e) => setPeerVolume(peerId, Number(e.target.value))}
-                    className="w-full accent-amber-500"
-                    aria-label={`Adjust volume for ${peerId.slice(0, 8)}`}
-                  />
-                </label>
-              </div>
-              <div className="mt-2 text-xs text-muted-foreground flex items-center justify-between gap-2">
-                <span>{healthText}</span>
-                {tip && <span className="text-amber-600">{tip}</span>}
-              </div>
-              <div className="w-full h-32 bg-blue-100 rounded-md flex items-center justify-center">
-                <span className="text-2xl">👤</span>
-              </div>
+        {peers.map((peer) => (
+          <div key={peer.id} className="border rounded-lg p-6 flex flex-col items-center justify-center bg-card h-48 relative">
+            <div className="h-16 w-16 rounded-full bg-green-500/10 flex items-center justify-center mb-3">
+              <span className="text-2xl">🔊</span>
             </div>
-          );
-        })}
+            <h3 className="font-semibold">Peer ({peer.id.slice(0, 4)})</h3>
+            <div className="mt-2 flex items-center gap-2">
+              {peer.muted ? (
+                <span className="text-xs text-destructive flex items-center gap-1">
+                  <MicOff className="h-3 w-3" /> Muted
+                </span>
+              ) : (
+                <span className="text-xs text-green-600 flex items-center gap-1">
+                  <Mic className="h-3 w-3" /> Live
+                </span>
+              )}
+            </div>
+            
+            <audio
+              ref={(node) => {
+                if (node) {
+                  node.srcObject = peer.stream;
+                }
+              }}
+              autoPlay
+              playsInline
+            />
+          </div>
+        ))}
       </div>
     </div>
   );
