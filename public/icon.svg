@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <g transform="translate(256, 266)">
+    <!-- 
+      Triangle Mesh 
+      Top: (0, -150)
+      Bottom Left: (-130, 100)
+      Bottom Right: (130, 100)
+    -->
+    <path d="M0 -150 L-130 100 L130 100 Z" 
+          fill="none" 
+          stroke="#C5F74F" 
+          stroke-width="32" 
+          stroke-linecap="round" 
+          stroke-linejoin="round" />
+    
+    <!-- Nodes -->
+    <circle cx="0" cy="-150" r="32" fill="#C5F74F" />
+    <circle cx="-130" cy="100" r="32" fill="#C5F74F" />
+    <circle cx="130" cy="100" r="32" fill="#C5F74F" />
+  </g>
+</svg>
