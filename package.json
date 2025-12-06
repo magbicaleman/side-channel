@@ -7,6 +7,7 @@
 		"cf-typegen": "wrangler types",
 		"deploy": "npm run build && wrangler deploy",
 		"dev": "react-router dev",
+		"dev:host": "react-router dev --host",
 		"postinstall": "npm run cf-typegen",
 		"preview": "npm run build && vite preview",
 		"typecheck": "npm run cf-typegen && react-router typegen && tsc -b"
@@ -19,9 +20,11 @@
 		"clsx": "^2.1.1",
 		"isbot": "^5.1.31",
 		"lucide-react": "^0.555.0",
+		"next-themes": "^0.4.6",
 		"react": "^19.1.1",
 		"react-dom": "^19.1.1",
 		"react-router": "^7.9.2",
+		"sonner": "^2.0.7",
 		"tailwind-merge": "^3.4.0",
 		"zod": "^4.1.13"
 	},

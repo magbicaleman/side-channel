@@ -36,6 +36,8 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+  const [audioOutputDevices, setAudioOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string>("");
   
   // State: Simplistic array of peers
   // We use a Map internally for O(1) lookups during signaling, but sync to an array for the UI
@@ -53,7 +55,9 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     try {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter((device) => device.kind === "audioinput");
+      const audioOutputs = devices.filter((device) => device.kind === "audiooutput");
       setAudioDevices(audioInputs);
+      setAudioOutputDevices(audioOutputs);
     } catch (err) {
       console.error("Failed to enumerate devices:", err);
     }
@@ -125,6 +129,10 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     if (deviceId === selectedDeviceId) return;
     setSelectedDeviceId(deviceId);
     await refreshLocalStream(deviceId);
+  };
+  
+  const switchOutputDevice = (deviceId: string) => {
+    setSelectedOutputDeviceId(deviceId);
   };
 
   const toggleMute = useCallback(() => {
@@ -373,5 +381,8 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     audioDevices,
     selectedDeviceId,
     switchDevice,
+    audioOutputDevices,
+    selectedOutputDeviceId,
+    switchOutputDevice,
   };
 }

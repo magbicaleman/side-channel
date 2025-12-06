@@ -1,5 +1,5 @@
 import { type LoaderFunctionArgs, useNavigate } from "react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
 import { Button } from "~/components/ui/button";
 import {
@@ -16,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Settings, Mic, MicOff, Share2 } from "lucide-react";
+import { Settings, Mic, MicOff, Share2, Volume2, Phone } from "lucide-react";
+import { toast } from "sonner";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -70,6 +71,28 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   }, { headers });
 }
 
+function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDeviceId: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  useEffect(() => {
+    if (audioRef.current && outputDeviceId) {
+      if ('setSinkId' in audioRef.current && typeof (audioRef.current as any).setSinkId === 'function') {
+        (audioRef.current as any).setSinkId(outputDeviceId).catch((err: unknown) => {
+          console.error("Failed to set output device:", err);
+        });
+      }
+    }
+  }, [outputDeviceId]);
+
+  return <audio ref={audioRef} autoPlay playsInline />;
+}
+
 export default function Room({ loaderData }: Route.ComponentProps) {
   const { roomId, clientId, websocketUrl } = loaderData as { 
     roomId: string; 
@@ -116,7 +139,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     leave, 
     audioDevices, 
     selectedDeviceId, 
-    switchDevice 
+    switchDevice,
+    audioOutputDevices,
+    selectedOutputDeviceId,
+    switchOutputDevice
   } = useWebRTC({
     roomId,
     socket,
@@ -131,6 +157,29 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const handleLeave = () => {
     leave();
     navigate("/");
+  };
+
+  const handleSpeakerToggle = () => {
+    // If no output devices are found (iOS Safari usually), show toast
+    if (!audioOutputDevices || audioOutputDevices.length === 0) {
+      toast("Audio Output Settings", {
+        description: "To switch between Speaker and Earpiece, please use the AirPlay/Audio controls in your device's Control Center.",
+        duration: 5000,
+      });
+      return;
+    }
+
+    // Cycle logic: If current is not set or first, go to next.
+    // If we have 'speaker' usage we can try to find devices labeled 'speaker'
+    
+    const currentIndex = audioOutputDevices.findIndex(d => d.deviceId === selectedOutputDeviceId);
+    const nextIndex = (currentIndex + 1) % audioOutputDevices.length;
+    const nextDevice = audioOutputDevices[nextIndex];
+    
+    if (nextDevice) {
+      switchOutputDevice(nextDevice.deviceId);
+      toast(`Switched to ${nextDevice.label || "Speaker"}`);
+    }
   };
 
   useEffect(() => {
@@ -155,6 +204,15 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   };
 
   const selectedDeviceLabel = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label || "Default Microphone";
+  const selectedOutputLabel = audioOutputDevices.find(d => d.deviceId === selectedOutputDeviceId)?.label || "Default Speaker";
+  
+  // Decide which icon to show for output
+  // If explicitly "speaker", show volume-2. Any other ID (earpiece often empty or 'earpiece') show phone?
+  // Actually simpler: if we have NO devices, we assume mobile/auto, show Volume2 as generic.
+  // If we have devices, toggle between them.
+  // Let's just use Volume2 for "Speaker" active, Phone for "Earpiece" active.
+  // But detection is tricky by label.
+  const isSpeaker = selectedOutputLabel.toLowerCase().includes("speaker");
 
   return (
     <div className="p-8 space-y-6">
@@ -190,7 +248,9 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                       onValueChange={(value) => switchDevice(value)}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select a microphone" />
+                      <SelectValue placeholder="Select a microphone">
+                        {selectedDeviceLabel}
+                      </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         {audioDevices.map((device) => (
@@ -201,6 +261,31 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  {audioOutputDevices.length > 0 && (
+                     <div className="space-y-2">
+                        <label className="text-sm font-medium leading-none">
+                          Speaker / Output
+                        </label>
+                        <Select
+                          value={selectedOutputDeviceId}
+                          onValueChange={(value) => switchOutputDevice(value)}
+                        >
+                          <SelectTrigger>
+                             <SelectValue placeholder="Select output">
+                                {selectedOutputLabel}
+                             </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {audioOutputDevices.map((device) => (
+                              <SelectItem key={device.deviceId} value={device.deviceId}>
+                                {device.label || `Speaker ${device.deviceId.slice(0, 5)}...`}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                     </div>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>
@@ -222,6 +307,16 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 {isMuted ? <MicOff className="h-4 w-4 mr-2" /> : <Mic className="h-4 w-4 mr-2" />}
                 {isMuted ? "Unmute" : "Mute"}
               </Button>
+              
+              <Button
+                variant="secondary"
+                size="icon"
+                onClick={handleSpeakerToggle}
+                title="Toggle Speaker/Earpiece"
+              >
+                 {isSpeaker ? <Volume2 className="h-4 w-4" /> : <Phone className="h-4 w-4" />}
+              </Button>
+
               <Button variant="destructive" onClick={handleLeave}>
                 Leave
               </Button>
@@ -244,7 +339,6 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                <MicOff className="h-3 w-3" /> MUTED
              </div>
            )}
-           {/* Visualizer removed as requested, just simplistic state */}
         </div>
 
         {/* Remote Peers */}
@@ -266,15 +360,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
               )}
             </div>
             
-            <audio
-              ref={(node) => {
-                if (node) {
-                  node.srcObject = peer.stream;
-                }
-              }}
-              autoPlay
-              playsInline
-            />
+            <AudioPlayer stream={peer.stream} outputDeviceId={selectedOutputDeviceId} />
           </div>
         ))}
       </div>
