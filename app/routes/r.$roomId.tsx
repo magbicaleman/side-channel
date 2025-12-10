@@ -27,7 +27,7 @@ import {
   Phone, 
   Copy, 
   Check, 
-  LogOut,
+  PhoneOff,
   Users
 } from "lucide-react";
 import { toast } from "sonner";
@@ -446,16 +446,16 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             {/* Mode Toggle */}
             <ModeToggle />
 
-            <div className="w-px h-8 bg-border mx-1 md:mx-2" />
+            <div className="w-px h-6 bg-border mx-2" />
 
              {/* Leave Button */}
             <Button
-                variant="destructive"
+                variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/20 transition-transform duration-300 hover:scale-110 active:scale-95"
+                className="rounded-full w-12 h-12 text-red-500 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-500/20 dark:hover:text-red-300 transition-all duration-200"
                 onClick={handleLeave}
             >
-                <LogOut className="h-5 w-5 pl-0.5" />
+                <PhoneOff className="h-5 w-5" />
             </Button>
         </div>
       </div>
