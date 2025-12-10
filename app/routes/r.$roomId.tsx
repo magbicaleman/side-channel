@@ -339,7 +339,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 <div className="border border-dashed border-border rounded-xl bg-muted/30 h-48 md:h-56 flex flex-col items-center justify-center text-muted-foreground gap-2 animate-in fade-in duration-700 delay-100">
                     <Users className="w-8 h-8 opacity-20" />
                     <span className="text-sm font-medium">Waiting for peers...</span>
-                    <Button variant="link" className="text-muted-foreground" onClick={handleCopyLink}>
+                    <Button variant="link" className="text-muted-foreground" onClick={handleShare}>
                         Invite someone
                     </Button>
                 </div>
