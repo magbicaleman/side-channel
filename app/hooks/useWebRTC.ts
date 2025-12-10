@@ -56,11 +56,34 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       const devices = await navigator.mediaDevices.enumerateDevices();
       const audioInputs = devices.filter((device) => device.kind === "audioinput");
       const audioOutputs = devices.filter((device) => device.kind === "audiooutput");
+      
       setAudioDevices(audioInputs);
       setAudioOutputDevices(audioOutputs);
       
-      // Auto-select default output if not already selected
-      if (audioOutputs.length > 0 && !selectedOutputDeviceId) {
+      // Smart Fallback: Input
+      // If currently selected mic is gone, we must refresh stream to default
+      if (selectedDeviceId) {
+         const stillExists = audioInputs.some(d => d.deviceId === selectedDeviceId);
+         if (!stillExists) {
+             console.log("Selected mic disconnected, reverting to default");
+             setSelectedDeviceId(""); // Clear selection
+             // We need to refresh the stream because the old track is likely dead/ended
+             // Calling refreshLocalStream() without arg uses default constraints
+             refreshLocalStream().catch(console.warn);
+             return; // refreshLocalStream will call getAudioDevices again, so we can stop here
+         }
+      }
+
+      // Smart Fallback: Output
+      if (selectedOutputDeviceId) {
+        const stillExists = audioOutputs.some(d => d.deviceId === selectedOutputDeviceId);
+        if (!stillExists) {
+             console.log("Selected speaker disconnected, reverting to default");
+             const defaultDevice = audioOutputs.find(d => d.deviceId === 'default');
+             setSelectedOutputDeviceId(defaultDevice ? defaultDevice.deviceId : (audioOutputs[0]?.deviceId || ""));
+        }
+      } else if (audioOutputs.length > 0) {
+        // Auto-select if nothing selected yet
         const defaultDevice = audioOutputs.find(d => d.deviceId === 'default');
         if (defaultDevice) {
              setSelectedOutputDeviceId(defaultDevice.deviceId);
@@ -165,8 +188,15 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     let mounted = true;
     refreshLocalStream().catch(console.error);
 
+    // devicechange listener
+    const handleDeviceChange = () => {
+        getAudioDevices();
+    };
+    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+
     return () => {
       mounted = false;
+      navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
       }
