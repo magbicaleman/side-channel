@@ -132,6 +132,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   };
   
   const switchOutputDevice = (deviceId: string) => {
+    if (!deviceId) return;
     setSelectedOutputDeviceId(deviceId);
   };
 

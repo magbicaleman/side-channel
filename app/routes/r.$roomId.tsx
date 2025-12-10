@@ -94,11 +94,23 @@ function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDe
   }, [stream]);
 
   useEffect(() => {
-    if (audioRef.current && outputDeviceId) {
-      if ('setSinkId' in audioRef.current && typeof (audioRef.current as any).setSinkId === 'function') {
-        (audioRef.current as any).setSinkId(outputDeviceId).catch((err: unknown) => {
-          console.error("Failed to set output device:", err);
-        });
+    const audioEl = audioRef.current;
+    if (!audioEl) return;
+
+    if (outputDeviceId) {
+      if ('setSinkId' in audioEl && typeof (audioEl as any).setSinkId === 'function') {
+        (audioEl as any).setSinkId(outputDeviceId)
+            .then(() => {
+                // Success - play just in case
+                audioEl.play().catch(e => console.warn("Play failed after sink change:", e));
+            })
+            .catch((err: unknown) => {
+                console.warn("Failed to set output device (sinkId), continuing with default:", err);
+                // Critical: Ensure audio keeps playing even if switch failed
+                audioEl.play().catch(e => console.warn("Play failed in sink error handler:", e));
+            });
+      } else {
+        console.warn("setSinkId not supported on this browser.");
       }
     }
   }, [outputDeviceId]);
@@ -415,11 +427,12 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                         </Select>
                     </div>
                     
-                    {audioOutputDevices.length > 0 && (
-                        <div className="space-y-3">
-                            <label className="text-sm font-medium text-neutral-400">
-                                Speaker / Output
-                            </label>
+                    {/* Output Selection (Conditional) */}
+                    <div className="space-y-3">
+                        <label className="text-sm font-medium text-neutral-400">
+                            Speaker / Output
+                        </label>
+                        {audioOutputDevices.length > 0 ? (
                             <Select
                                 value={selectedOutputDeviceId}
                                 onValueChange={(value) => switchOutputDevice(value)}
@@ -437,8 +450,12 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                                     ))}
                                 </SelectContent>
                             </Select>
-                        </div>
-                    )}
+                        ) : (
+                            <div className="text-sm text-neutral-500 italic bg-neutral-900/50 p-2 rounded border border-neutral-800">
+                                System Default (Controlled by OS)
+                            </div>
+                        )}
+                    </div>
                 </div>
                 </DialogContent>
             </Dialog>
