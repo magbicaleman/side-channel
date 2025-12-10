@@ -58,6 +58,16 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       const audioOutputs = devices.filter((device) => device.kind === "audiooutput");
       setAudioDevices(audioInputs);
       setAudioOutputDevices(audioOutputs);
+      
+      // Auto-select default output if not already selected
+      if (audioOutputs.length > 0 && !selectedOutputDeviceId) {
+        const defaultDevice = audioOutputs.find(d => d.deviceId === 'default');
+        if (defaultDevice) {
+             setSelectedOutputDeviceId(defaultDevice.deviceId);
+        } else {
+             setSelectedOutputDeviceId(audioOutputs[0].deviceId);
+        }
+      }
     } catch (err) {
       console.error("Failed to enumerate devices:", err);
     }

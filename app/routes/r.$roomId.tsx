@@ -90,6 +90,8 @@ function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDe
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.srcObject = stream;
+      // Explicitly attempt to play to avoid "silent until interaction" issues
+      audioRef.current.play().catch(e => console.warn("Auto-play blocked:", e));
     }
   }, [stream]);
 
