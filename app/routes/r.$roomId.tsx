@@ -190,6 +190,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const [isMuted, setIsMuted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
+  const [supportsSetSinkId, setSupportsSetSinkId] = useState(false);
 
   // Initialize WebSocket
   useEffect(() => {
@@ -219,6 +220,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   // Check Share Capability
   useEffect(() => {
     setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+    setSupportsSetSinkId(typeof window !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype);
   }, []);
 
   // Initialize WebRTC
@@ -427,35 +429,41 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                         </Select>
                     </div>
                     
-                    {/* Output Selection (Conditional) */}
-                    <div className="space-y-3">
-                        <label className="text-sm font-medium text-neutral-400">
-                            Speaker / Output
-                        </label>
-                        {audioOutputDevices.length > 0 ? (
-                            <Select
-                                value={selectedOutputDeviceId}
-                                onValueChange={(value) => switchOutputDevice(value)}
-                            >
-                                <SelectTrigger className="bg-neutral-950 border-neutral-800 text-neutral-200">
-                                    <SelectValue placeholder="Select output">
-                                        {selectedOutputLabel}
-                                    </SelectValue>
-                                </SelectTrigger>
-                                <SelectContent className="bg-neutral-950 border-neutral-800 text-neutral-200">
-                                    {audioOutputDevices.map((device) => (
-                                        <SelectItem key={device.deviceId} value={device.deviceId}>
-                                            {device.label || `Speaker ${device.deviceId.slice(0, 5)}...`}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        ) : (
-                            <div className="text-sm text-neutral-500 italic bg-neutral-900/50 p-2 rounded border border-neutral-800">
-                                System Default (Controlled by OS)
-                            </div>
-                        )}
-                    </div>
+                        {/* Output Selection (Conditional) */}
+                        <div className="space-y-3">
+                            <label className="text-sm font-medium text-neutral-400">
+                                Speaker / Output
+                            </label>
+                            {supportsSetSinkId && audioOutputDevices.length > 0 ? (
+                                <Select
+                                    value={selectedOutputDeviceId}
+                                    onValueChange={(value) => switchOutputDevice(value)}
+                                >
+                                    <SelectTrigger className="bg-neutral-950 border-neutral-800 text-neutral-200">
+                                        <SelectValue placeholder="Select output">
+                                            {selectedOutputLabel}
+                                        </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-neutral-950 border-neutral-800 text-neutral-200">
+                                        {audioOutputDevices.map((device) => (
+                                            <SelectItem key={device.deviceId} value={device.deviceId}>
+                                                {device.label || `Speaker ${device.deviceId.slice(0, 5)}...`}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            ) : (
+                                <div className="text-sm text-neutral-500 italic bg-neutral-900/50 p-3 rounded border border-neutral-800">
+                                    {!supportsSetSinkId ? (
+                                        <span>
+                                            To switch to Speaker/Earpiece, use the AirPlay / Control Center controls on your device.
+                                        </span>
+                                    ) : (
+                                       <span>System Default (Controlled by OS)</span>
+                                    )}
+                                </div>
+                            )}
+                        </div>
                 </div>
                 </DialogContent>
             </Dialog>
