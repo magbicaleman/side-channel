@@ -1,5 +1,6 @@
 import { Form, redirect } from "react-router";
 import { Button } from "~/components/ui/button";
+import { ModeToggle } from "~/components/mode-toggle";
 import { AudioWaveform } from "lucide-react";
 import type { Route } from "./+types/_index";
 
@@ -24,6 +25,11 @@ export default function Index() {
       
       {/* Decorative Elements */}
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5" />
+
+      {/* Theme Toggle */}
+      <div className="absolute top-4 right-4 z-50">
+        <ModeToggle />
+      </div>
 
       <div className="relative z-10 flex flex-col items-center space-y-8 animate-in fade-in zoom-in-95 duration-700">
         

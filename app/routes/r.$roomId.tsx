@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, useNavigate } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
 import { Button } from "~/components/ui/button";
+import { ModeToggle } from "~/components/mode-toggle";
 import { Card } from "~/components/ui/card";
 import {
   Dialog,
@@ -441,6 +442,9 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Mode Toggle */}
+            <ModeToggle />
 
             <div className="w-px h-8 bg-white/10 mx-1 md:mx-2" />
 
