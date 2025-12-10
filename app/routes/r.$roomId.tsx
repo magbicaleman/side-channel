@@ -121,7 +121,7 @@ function PeerCard({
   outputDeviceId?: string;
 }) {
   return (
-    <Card className="bg-neutral-900 border-neutral-800 relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-neutral-700">
+    <Card className="bg-neutral-900 border-neutral-800 relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-neutral-700 animate-in fade-in zoom-in-95 duration-500">
       {/* Status Overlay */}
       <div className="absolute top-3 right-3 flex gap-2">
         {muted ? (
@@ -176,6 +176,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [canShare, setCanShare] = useState(false);
 
   // Initialize WebSocket
   useEffect(() => {
@@ -202,6 +203,11 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     };
   }, [websocketUrl, clientId]);
 
+  // Check Share Capability
+  useEffect(() => {
+    setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
+  }, []);
+
   // Initialize WebRTC
   const { 
     localStream, 
@@ -227,7 +233,8 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
   const handleLeave = () => {
     leave();
-    navigate("/");
+    // Use View Transition for exit
+    navigate("/", { viewTransition: true });
   };
 
   const handleCopyLink = () => {
@@ -235,6 +242,22 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     setCopied(true);
     toast("Link copied to clipboard");
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleShare = async () => {
+    if (!canShare) {
+        handleCopyLink();
+        return;
+    }
+    try {
+      await navigator.share({
+        title: `Join my room: ${roomId}`,
+        text: "Hop into this Side Channel room",
+        url: window.location.href,
+      });
+    } catch (error) {
+       // Ignore abort errors
+    }
   };
 
   const handleSpeakerToggle = () => {
@@ -260,9 +283,9 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-50 font-sans selection:bg-primary/20">
-      {/* Top Bar */}
-      <header className="p-4 md:p-6 flex items-center justify-between border-b border-white/5 bg-neutral-950/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="flex items-center gap-3">
+      {/* Top Bar (Simplified) */}
+      <header className="p-4 md:p-6 flex items-center justify-between pointer-events-none sticky top-0 z-10">
+        <div className="flex items-center gap-3 pointer-events-auto bg-neutral-950/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/5">
             <div className={`w-2 h-2 rounded-full ${status === 'Connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`} />
             <h1 className="text-sm font-medium text-neutral-400 font-mono tracking-tight">
               {roomId}
@@ -276,18 +299,20 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
             </Button>
         </div>
-        <div className="flex items-center gap-2">
+        
+        {/* Client ID Badge */}
+        <div className="flex items-center gap-2 pointer-events-auto bg-neutral-950/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/5">
             <div className="text-xs text-neutral-600 font-mono hidden sm:block">
                 ID: {clientId?.slice(0, 8)}...
             </div>
-            <div className="h-8 w-8 rounded-full bg-neutral-800 flex items-center justify-center text-xs font-bold ring-2 ring-neutral-900">
+            <div className="h-6 w-6 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold ring-1 ring-neutral-700">
                 {clientId?.slice(0, 2).toUpperCase()}
             </div>
         </div>
       </header>
 
       {/* Main Grid */}
-      <main className="p-4 md:p-8 pb-32 max-w-[1600px] mx-auto">
+      <main className="p-4 md:p-8 pb-32 max-w-[1600px] mx-auto animate-in fade-in duration-500">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
             {/* Local User Card */}
             <PeerCard 
@@ -308,9 +333,9 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 />
             ))}
             
-            {/* Empty State / Ghost Cards (Optional purely for vibes or layout balance) */}
+            {/* Empty State / Ghost Cards */}
             {peers.length === 0 && (
-                <div className="border border-dashed border-neutral-800 rounded-xl bg-neutral-900/20 h-48 md:h-56 flex flex-col items-center justify-center text-neutral-700 gap-2">
+                <div className="border border-dashed border-neutral-800 rounded-xl bg-neutral-900/10 h-48 md:h-56 flex flex-col items-center justify-center text-neutral-700 gap-2 animate-in fade-in duration-700 delay-100">
                     <Users className="w-8 h-8 opacity-20" />
                     <span className="text-sm font-medium">Waiting for peers...</span>
                     <Button variant="link" className="text-neutral-500" onClick={handleCopyLink}>
@@ -322,7 +347,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
       </main>
 
       {/* Bottom Floating Control Bar */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw]">
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw] animate-in slide-in-from-bottom-10 fade-in duration-500 delay-200">
         <div className="bg-neutral-900/90 backdrop-blur-md border border-white/10 shadow-2xl rounded-full px-4 h-16 flex items-center gap-2 md:gap-4 ring-1 ring-black/50">
             
             {/* Mute Toggle */}
@@ -342,6 +367,16 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 onClick={handleSpeakerToggle}
             >
                 {isSpeaker ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
+            </Button>
+
+             {/* Share Button (New) */}
+            <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full w-12 h-12 text-neutral-400 hover:text-white hover:bg-neutral-800"
+                onClick={handleShare}
+            >
+                <Share2 className="h-5 w-5" />
             </Button>
 
             {/* Settings Dialog */}

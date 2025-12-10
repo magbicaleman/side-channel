@@ -1,21 +1,23 @@
+
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <g transform="translate(256, 266)">
-    <!-- 
-      Triangle Mesh 
-      Top: (0, -150)
-      Bottom Left: (-130, 100)
-      Bottom Right: (130, 100)
-    -->
-    <path d="M0 -150 L-130 100 L130 100 Z" 
-          fill="none" 
-          stroke="#C5F74F" 
-          stroke-width="32" 
-          stroke-linecap="round" 
-          stroke-linejoin="round" />
-    
-    <!-- Nodes -->
-    <circle cx="0" cy="-150" r="32" fill="#C5F74F" />
-    <circle cx="-130" cy="100" r="32" fill="#C5F74F" />
-    <circle cx="130" cy="100" r="32" fill="#C5F74F" />
+  <!-- Background: Dark rounded square (Matches Theme) -->
+  <rect width="512" height="512" rx="120" fill="#09090b"/>
+  
+  <!-- Lucide AudioWaveform Path -->
+  <!-- 
+       Original ViewBox: 24x24
+       Target Size: ~384x384 (to leave padding)
+       Scale Factor: 16 (16 * 24 = 384)
+       Offset: (512 - 384) / 2 = 64px to center it
+  -->
+  <g transform="translate(64, 64) scale(16)">
+    <path 
+      d="M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2" 
+      fill="none" 
+      stroke="#C5F74F" 
+      stroke-width="2" 
+      stroke-linecap="round" 
+      stroke-linejoin="round"
+    />
   </g>
 </svg>
