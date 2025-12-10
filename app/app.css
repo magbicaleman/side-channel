@@ -155,6 +155,22 @@ body {
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+@utility btn-premium {
+  @apply relative overflow-hidden transition-all duration-300;
+  @apply bg-neutral-950 text-white shadow-lg shadow-neutral-500/20;
+  @apply dark:bg-neutral-900 dark:shadow-[0_0_20px_rgba(197,247,79,0.05)];
+  
+  &:hover {
+    @apply shadow-xl shadow-neutral-500/40;
+    @apply dark:shadow-[0_0_20px_rgba(197,247,79,0.5)];
+    @apply -translate-y-0.5;
+  }
+
+  &:active {
+    @apply scale-95 translate-y-0;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

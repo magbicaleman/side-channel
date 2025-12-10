@@ -374,7 +374,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted"
+                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted transition-transform duration-300 hover:scale-110 active:scale-95"
                 onClick={handleShare}
             >
                 <Share2 className="h-5 w-5" />
@@ -452,7 +452,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="destructive"
                 size="icon"
-                className="rounded-full w-12 h-12 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/20"
+                className="rounded-full w-12 h-12 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/20 transition-transform duration-300 hover:scale-110 active:scale-95"
                 onClick={handleLeave}
             >
                 <LogOut className="h-5 w-5 pl-0.5" />

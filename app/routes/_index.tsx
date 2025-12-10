@@ -1,7 +1,7 @@
 import { Form, redirect } from "react-router";
 import { Button } from "~/components/ui/button";
 import { ModeToggle } from "~/components/mode-toggle";
-import { AudioWaveform } from "lucide-react";
+import { ArrowRight, AudioWaveform } from "lucide-react";
 import type { Route } from "./+types/_index";
 
 export const meta: Route.MetaFunction = () => {
@@ -51,9 +51,10 @@ export default function Index() {
           <Button 
             size="lg" 
             type="submit" 
-            className="h-14 px-8 text-lg rounded-full bg-white text-black hover:bg-neutral-200 transition-transform active:scale-95 duration-200"
+            className="btn-premium group h-14 px-8 text-xl rounded-full"
           >
             Create Room
+            <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
           </Button>
         </Form>
       </div>
