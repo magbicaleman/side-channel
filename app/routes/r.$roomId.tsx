@@ -122,11 +122,11 @@ function PeerCard({
   outputDeviceId?: string;
 }) {
   return (
-    <Card className="bg-neutral-900 border-neutral-800 relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-neutral-700 animate-in fade-in zoom-in-95 duration-500">
+    <Card className="bg-card border-border relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-primary/50 animate-in fade-in zoom-in-95 duration-500">
       {/* Status Overlay */}
       <div className="absolute top-3 right-3 flex gap-2">
         {muted ? (
-          <div className="bg-red-500/20 text-red-500 rounded-full p-1.5 backdrop-blur-sm">
+          <div className="bg-destructive/20 text-destructive rounded-full p-1.5 backdrop-blur-sm">
             <MicOff className="w-4 h-4" />
           </div>
         ) : (
@@ -137,7 +137,7 @@ function PeerCard({
       </div>
 
       {/* Avatar Circle */}
-      <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-2xl md:text-3xl font-bold mb-4 shadow-xl ${isLocal ? 'bg-primary/20 text-primary border-2 border-primary/30' : 'bg-neutral-800 text-neutral-400 border-2 border-neutral-700'}`}>
+      <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-2xl md:text-3xl font-bold mb-4 shadow-xl ${isLocal ? 'bg-primary/20 text-primary border-2 border-primary/30' : 'bg-muted text-muted-foreground border-2 border-border'}`}>
         {id.slice(0, 2).toUpperCase()}
       </div>
 
@@ -283,10 +283,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const isSpeaker = selectedOutputLabel.toLowerCase().includes("speaker");
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-50 font-sans selection:bg-primary/20">
+    <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
       {/* Top Bar (Simplified) */}
       <header className="p-4 md:p-6 flex items-center justify-between pointer-events-none sticky top-0 z-10">
-        <div className="flex items-center gap-3 pointer-events-auto bg-neutral-950/50 backdrop-blur-sm px-4 py-2 rounded-full border border-white/5">
+        <div className="flex items-center gap-3 pointer-events-auto bg-background/50 backdrop-blur-sm px-4 py-2 rounded-full border border-border">
             <div className={`w-2 h-2 rounded-full ${status === 'Connected' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-red-500'}`} />
             <h1 className="text-sm font-medium text-neutral-400 font-mono tracking-tight">
               {roomId}
@@ -302,11 +302,11 @@ export default function Room({ loaderData }: Route.ComponentProps) {
         </div>
         
         {/* Client ID Badge */}
-        <div className="flex items-center gap-2 pointer-events-auto bg-neutral-950/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/5">
-            <div className="text-xs text-neutral-600 font-mono hidden sm:block">
+        <div className="flex items-center gap-2 pointer-events-auto bg-background/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-border">
+            <div className="text-xs text-muted-foreground font-mono hidden sm:block">
                 ID: {clientId?.slice(0, 8)}...
             </div>
-            <div className="h-6 w-6 rounded-full bg-neutral-800 flex items-center justify-center text-[10px] font-bold ring-1 ring-neutral-700">
+            <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center text-[10px] font-bold ring-1 ring-border">
                 {clientId?.slice(0, 2).toUpperCase()}
             </div>
         </div>
@@ -336,10 +336,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             
             {/* Empty State / Ghost Cards */}
             {peers.length === 0 && (
-                <div className="border border-dashed border-neutral-800 rounded-xl bg-neutral-900/10 h-48 md:h-56 flex flex-col items-center justify-center text-neutral-700 gap-2 animate-in fade-in duration-700 delay-100">
+                <div className="border border-dashed border-border rounded-xl bg-muted/30 h-48 md:h-56 flex flex-col items-center justify-center text-muted-foreground gap-2 animate-in fade-in duration-700 delay-100">
                     <Users className="w-8 h-8 opacity-20" />
                     <span className="text-sm font-medium">Waiting for peers...</span>
-                    <Button variant="link" className="text-neutral-500" onClick={handleCopyLink}>
+                    <Button variant="link" className="text-muted-foreground" onClick={handleCopyLink}>
                         Invite someone
                     </Button>
                 </div>
@@ -349,12 +349,12 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
       {/* Bottom Floating Control Bar */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw] animate-in slide-in-from-bottom-10 fade-in duration-500 delay-200">
-        <div className="bg-neutral-900/90 backdrop-blur-md border border-white/10 shadow-2xl rounded-full px-4 h-16 flex items-center gap-2 md:gap-4 ring-1 ring-black/50">
+        <div className="bg-background/80 backdrop-blur-md border border-border shadow-2xl rounded-full px-4 h-16 flex items-center gap-2 md:gap-4 ring-1 ring-black/5">
             
             {/* Mute Toggle */}
             <Button
                 size="icon"
-                className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-900/20' : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'}`}
+                className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' : 'bg-muted hover:bg-muted/80 text-foreground'}`}
                 onClick={handleMuteToggle}
             >
                 {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
@@ -364,7 +364,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 text-neutral-400 hover:text-white hover:bg-neutral-800"
+                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted"
                 onClick={handleSpeakerToggle}
             >
                 {isSpeaker ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
@@ -374,7 +374,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 text-neutral-400 hover:text-white hover:bg-neutral-800"
+                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted"
                 onClick={handleShare}
             >
                 <Share2 className="h-5 w-5" />
@@ -383,29 +383,29 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             {/* Settings Dialog */}
             <Dialog>
                 <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 text-neutral-400 hover:text-white hover:bg-neutral-800">
+                    <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted">
                         <Settings className="h-5 w-5" />
                     </Button>
                 </DialogTrigger>
-                <DialogContent className="bg-neutral-900 border-neutral-800 text-neutral-100">
+                <DialogContent className="bg-background border-border text-foreground">
                 <DialogHeader>
                     <DialogTitle>Audio Settings</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
                     <div className="space-y-3">
-                        <label className="text-sm font-medium text-neutral-400">
+                        <label className="text-sm font-medium text-muted-foreground">
                             Microphone
                         </label>
                         <Select
                             value={selectedDeviceId}
                             onValueChange={(value) => switchDevice(value)}
                         >
-                            <SelectTrigger className="bg-neutral-950 border-neutral-800 text-neutral-200">
+                            <SelectTrigger className="bg-background border-border text-foreground">
                                 <SelectValue placeholder="Select a microphone">
                                     {selectedDeviceLabel}
                                 </SelectValue>
                             </SelectTrigger>
-                            <SelectContent className="bg-neutral-950 border-neutral-800 text-neutral-200">
+                            <SelectContent className="bg-background border-border text-foreground">
                                 {audioDevices.map((device) => (
                                     <SelectItem key={device.deviceId} value={device.deviceId}>
                                         {device.label || `Microphone ${device.deviceId.slice(0, 5)}...`}
@@ -446,13 +446,13 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             {/* Mode Toggle */}
             <ModeToggle />
 
-            <div className="w-px h-8 bg-white/10 mx-1 md:mx-2" />
+            <div className="w-px h-8 bg-border mx-1 md:mx-2" />
 
              {/* Leave Button */}
             <Button
                 variant="destructive"
                 size="icon"
-                className="rounded-full w-12 h-12 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/20"
+                className="rounded-full w-12 h-12 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground border border-destructive/20"
                 onClick={handleLeave}
             >
                 <LogOut className="h-5 w-5 pl-0.5" />

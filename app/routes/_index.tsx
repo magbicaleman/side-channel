@@ -18,10 +18,10 @@ export const action = async () => {
 
 export default function Index() {
   return (
-    <div className="relative flex h-screen flex-col items-center justify-center bg-neutral-950 overflow-hidden">
+    <div className="relative flex h-screen flex-col items-center justify-center bg-background overflow-hidden">
       
       {/* Background Gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-neutral-900 via-neutral-950 to-neutral-950 opacity-80" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-muted/50 via-background to-background opacity-80" />
       
       {/* Decorative Elements */}
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5" />
@@ -39,10 +39,10 @@ export default function Index() {
         </div>
 
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold tracking-tighter text-white sm:text-5xl md:text-6xl">
+          <h1 className="text-4xl font-bold tracking-tighter text-foreground sm:text-5xl md:text-6xl">
             SideChannel
           </h1>
-          <p className="text-neutral-400 text-lg sm:text-xl font-light tracking-wide max-w-[600px]">
+          <p className="text-muted-foreground text-lg sm:text-xl font-light tracking-wide max-w-[600px]">
             Disposable, Peer-to-Peer Voice Chat.
           </p>
         </div>
