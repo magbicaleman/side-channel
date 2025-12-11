@@ -1,8 +1,11 @@
 import { Form, redirect } from "react-router";
+import { toast } from "sonner";
+import { useEffect } from "react";
+import type { Route } from "./+types/_index";
 import { Button } from "~/components/ui/button";
 import { ModeToggle } from "~/components/mode-toggle";
 import { ArrowRight, AudioWaveform } from "lucide-react";
-import type { Route } from "./+types/_index";
+import { useInstallPrompt } from "~/hooks/useInstallPrompt";
 
 export const meta: Route.MetaFunction = () => {
   return [
@@ -11,14 +14,44 @@ export const meta: Route.MetaFunction = () => {
   ];
 };
 
-export const action = async () => {
-  const uuid = crypto.randomUUID();
-  return redirect(`/r/${uuid}`);
-};
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  // ... (rest of action remains same)
+  const roomId = crypto.randomUUID();
+  return redirect(`/r/${roomId}`);
+}
 
-export default function Index() {
+export default function Home() {
+  const { installEvent, isStandalone, promptToInstall } = useInstallPrompt();
+  // Use sessionStorage to ensure we don't spam the user on every refresh within the same tab session,
+  // but allow it to reappear if they close and reopen the tab/browser.
+  // We can't rely just on a ref because the component remounts on refresh.
+  // React StrictMode might also double-invoke effects in dev, so we need to be careful.
+
+  useEffect(() => {
+    // Check if we already showed the prompt in this session
+    const hasShownPrompt = sessionStorage.getItem("hasShownInstallPrompt");
+
+    if (installEvent && !isStandalone && !hasShownPrompt) {
+      toast("Install SideChannel for the best experience.", {
+        action: {
+          label: "Install",
+          onClick: () => promptToInstall(),
+        },
+        duration: 10000, // 10 seconds
+        onDismiss: () => {
+             // Optional: track dismissal if needed
+        },
+        onAutoClose: () => {
+             // Optional: track auto close
+        }
+      });
+      sessionStorage.setItem("hasShownInstallPrompt", "true");
+    }
+  }, [installEvent, isStandalone, promptToInstall]);
+
   return (
-    <div className="relative flex h-screen flex-col items-center justify-center bg-background overflow-hidden">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-background relative selection:bg-primary/10">
       
       {/* Background Gradient */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-muted/50 via-background to-background opacity-80" />
@@ -27,7 +60,7 @@ export default function Index() {
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5" />
 
       {/* Theme Toggle */}
-      <div className="absolute top-4 right-4 z-50">
+      <div className="absolute top-4 right-4 z-10">
         <ModeToggle />
       </div>
 
