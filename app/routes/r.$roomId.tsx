@@ -34,7 +34,8 @@ import {
   Copy, 
   Check, 
   PhoneOff,
-  Users
+  Users,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Route } from "./+types/r.$roomId";
@@ -130,7 +131,10 @@ function PeerCard({
   stream, 
   isLocal = false, 
   micLabel,
-  outputDeviceId 
+  outputDeviceId,
+  permissionError,
+  onRetry,
+  isRequesting
 }: { 
   id: string; 
   muted?: boolean; 
@@ -138,9 +142,12 @@ function PeerCard({
   isLocal?: boolean; 
   micLabel?: string;
   outputDeviceId?: string;
+  permissionError?: boolean;
+  onRetry?: () => void;
+  isRequesting?: boolean;
 }) {
   return (
-    <Card className="bg-card border-border relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-primary/50 animate-in fade-in zoom-in-95 duration-500">
+    <Card className={`bg-card border-border relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-primary/50 animate-in fade-in zoom-in-95 duration-500 ${permissionError ? 'border-destructive/50' : ''}`}>
       {/* Status Overlay */}
       <div className="absolute top-3 right-3 flex gap-2">
         {muted ? (
@@ -164,15 +171,20 @@ function PeerCard({
         <h3 className="font-semibold text-card-foreground truncate w-full">
           {isLocal ? "You" : `Peer ${id.slice(0, 4)}`}
         </h3>
-        {micLabel && (
+        {permissionError ? (
+             <Button variant="destructive" size="sm" className="mt-2 h-7 text-xs" onClick={onRetry} disabled={isRequesting}>
+                {isRequesting ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+                {isRequesting ? "Waiting..." : "Enable Mic"}
+             </Button>
+        ) : micLabel ? (
           <p className="text-xs text-neutral-500 mt-1 truncate max-w-full">
             {micLabel}
           </p>
-        )}
+        ) : null}
       </div>
 
       {/* Viz/Pulse Effect (Simple CSS animation for active mic could go here) */}
-      {!muted && (
+      {!muted && !permissionError && (
         <div className="absolute inset-x-0 bottom-0 h-1 bg-green-500/50 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
       )}
 
@@ -185,10 +197,10 @@ function PeerCard({
 }
 
 export default function Room({ loaderData }: Route.ComponentProps) {
-  const { roomId, clientId, websocketUrl } = loaderData as { 
-    roomId: string; 
-    clientId: string; 
-    websocketUrl: string; 
+  const { roomId, clientId, websocketUrl } = loaderData as {
+    roomId: string;
+    clientId: string;
+    websocketUrl: string;
   };
   const navigate = useNavigate();
   const [status, setStatus] = useState("Disconnected");
@@ -197,6 +209,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const [copied, setCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
   const [supportsSetSinkId, setSupportsSetSinkId] = useState(false);
+  const [isRequesting, setIsRequesting] = useState(false);
 
   // Initialize WebSocket
   useEffect(() => {
@@ -230,24 +243,54 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   }, []);
 
   // Initialize WebRTC
-  const { 
-    localStream, 
-    peers, 
-    toggleMute, 
-    leave, 
-    audioDevices, 
-    selectedDeviceId, 
+  const {
+    localStream,
+    peers,
+    toggleMute,
+    leave,
+    audioDevices,
+    selectedDeviceId,
     switchDevice,
     audioOutputDevices,
     selectedOutputDeviceId,
-    switchOutputDevice
+    switchOutputDevice,
+    permissionState,
+    retryMedia
   } = useWebRTC({
     roomId,
     socket,
     clientId,
   });
 
-  const handleMuteToggle = () => {
+  const handleRetryMic = async () => {
+    setIsRequesting(true);
+    const timer = setTimeout(() => {
+        toast.warning("Browser suppressed the prompt?", {
+            description: "Check the 🔒 or 🔇 icon in your address bar.",
+            duration: 5000,
+        });
+    }, 2000);
+
+    try {
+        await retryMedia();
+    } catch (err: any) {
+        if (err.message === "PERM_DENIED") {
+            toast.error("Microphone access is blocked.", {
+                description: "Please allow access in your browser settings.",
+                duration: 5000,
+            });
+        }
+    } finally {
+        clearTimeout(timer);
+        setIsRequesting(false);
+    }
+  };
+
+  const handleMuteToggle = async () => {
+    if (permissionState === 'denied') {
+        await handleRetryMic();
+        return;
+    }
     const muted = toggleMute();
     setIsMuted(muted);
   };
@@ -288,6 +331,14 @@ export default function Room({ loaderData }: Route.ComponentProps) {
       });
       return;
     }
+
+    if (!supportsSetSinkId) {
+        toast("System audio control required", {
+            description: "Please use your device's Control Center or AirPlay menu to switch speakers.",
+        });
+        return;
+    }
+    
     const currentIndex = audioOutputDevices.findIndex(d => d.deviceId === selectedOutputDeviceId);
     const nextIndex = (currentIndex + 1) % audioOutputDevices.length;
     const nextDevice = audioOutputDevices[nextIndex];
@@ -300,7 +351,14 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
   const selectedDeviceLabel = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label || "Default Mic";
   const selectedOutputLabel = audioOutputDevices.find(d => d.deviceId === selectedOutputDeviceId)?.label || "Default Speaker";
-  const isSpeaker = selectedOutputLabel.toLowerCase().includes("speaker");
+  
+  // Speaker is only "Active" if we have explicitly selected a non-default output AND the browser supports switching
+  const isSpeakerActive = supportsSetSinkId && 
+                          selectedOutputDeviceId !== "" && 
+                          selectedOutputDeviceId !== "default" &&
+                          audioOutputDevices.some(d => d.deviceId === selectedOutputDeviceId);
+  
+
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
@@ -341,6 +399,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 isLocal={true} 
                 muted={isMuted}
                 micLabel={selectedDeviceLabel}
+
+                permissionError={permissionState === 'denied' || !localStream}
+                onRetry={handleRetryMic}
+                isRequesting={isRequesting}
             />
 
             {/* Remote Peers */}
@@ -351,6 +413,8 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                     muted={peer.muted}
                     stream={peer.stream}
                     outputDeviceId={selectedOutputDeviceId}
+                    permissionError={permissionState === 'denied'}
+                    onRetry={handleRetryMic}
                 />
             ))}
             
@@ -377,15 +441,22 @@ export default function Room({ loaderData }: Route.ComponentProps) {
               <TooltipTrigger asChild>
                 <Button
                   size="icon"
-                  variant={isMuted ? "default" : "ghost"}
-                  className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' : 'hover:bg-neutral-200 dark:hover:bg-white/10 text-foreground'}`}
+                  variant={isMuted || permissionState === 'denied' || !localStream ? "default" : "ghost"}
+                  disabled={!localStream && permissionState !== 'denied' && !isRequesting} 
+                  className={`rounded-full w-12 h-12 transition-all ${
+                    permissionState === 'denied' || !localStream
+                    ? 'bg-destructive/10 text-destructive hover:bg-destructive/20 border-2 border-destructive/50' 
+                    : isMuted 
+                        ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' 
+                        : 'hover:bg-neutral-200 dark:hover:bg-white/10 text-foreground'
+                  }`}
                   onClick={handleMuteToggle}
                 >
-                  {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  {isMuted || permissionState === 'denied' || !localStream ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{isMuted ? "Unmute" : "Mute"}</p>
+                <p>{permissionState === 'denied' || !localStream ? "Enable Mic" : isMuted ? "Unmute" : "Mute"}</p>
               </TooltipContent>
             </Tooltip>
 
@@ -395,10 +466,10 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`rounded-full w-12 h-12 transition-all ${isSpeaker ? 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90' : 'text-muted-foreground hover:bg-neutral-200 dark:hover:bg-white/10 hover:text-foreground'}`}
+                  className={`rounded-full w-12 h-12 transition-all ${isSpeakerActive ? 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90' : 'text-muted-foreground hover:bg-neutral-200 dark:hover:bg-white/10 hover:text-foreground'}`}
                   onClick={handleSpeakerToggle}
                 >
-                  {isSpeaker ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
+                  {isSpeakerActive ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>

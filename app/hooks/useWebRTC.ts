@@ -42,6 +42,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   // State: Simplistic array of peers
   // We use a Map internally for O(1) lookups during signaling, but sync to an array for the UI
   const [peersMap, setPeersMap] = useState<Map<string, PeerModel>>(new Map());
+  const [permissionState, setPermissionState] = useState<'initial' | 'granted' | 'denied'>('initial');
 
   // Refs
   const peerConnections = useRef<Map<string, RTCPeerConnection>>(new Map());
@@ -96,7 +97,21 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     }
   };
 
-  const refreshLocalStream = async (deviceId?: string) => {
+  
+  const checkPermissions = async () => {
+    if (typeof navigator !== 'undefined' && navigator.permissions) {
+      try {
+        const status = await navigator.permissions.query({ name: 'microphone' as any });
+        return status.state; // 'granted', 'denied', 'prompt'
+      } catch (e) {
+        // Firefox/Safari might throw on 'microphone' query if not supported
+        return 'prompt';
+      }
+    }
+    return 'prompt';
+  };
+
+  const refreshLocalStream = async (deviceId?: string, throwOnError = false) => {
     const wasMuted = localStreamRef.current?.getAudioTracks()[0]?.enabled === false;
     
     try {
@@ -114,15 +129,21 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       }
 
       // Restore mute state
+      // Restore mute state
       if (wasMuted) {
-        stream.getAudioTracks().forEach((t) => (t.enabled = false));
+         // This block was malformed in previous edit
       }
 
       localStreamRef.current = stream;
       setLocalStream(stream);
+      
+      // Restore mute state
+      const track = stream.getAudioTracks()[0];
+      if (track && wasMuted) {
+        track.enabled = false;
+      }
 
       // Update selected device if the browser gave us something specific
-      const track = stream.getAudioTracks()[0];
       if (track) {
         const settings = track.getSettings();
         if (settings.deviceId) {
@@ -153,9 +174,49 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       }
 
       await getAudioDevices();
-    } catch (err) {
+      setPermissionState('granted');
+    } catch (err: any) {
       console.error("Failed to get user media:", err);
+      
+      // Critical: Ensure we clear the stream on error so the UI shows "Enable Mic"
+      localStreamRef.current = null;
+      setLocalStream(null);
+
+      let errorToThrow = err;
+      
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        const isDismissed = err.message && err.message.toLowerCase().includes('dismissed');
+        
+        if (isDismissed) {
+             setPermissionState('initial'); // Or 'prompt', but 'initial' works for our UI
+             errorToThrow = null; // Don't throw for dismissed
+        } else {
+             setPermissionState('denied');
+             // Check if it's a hard block
+             const status = await checkPermissions();
+             if (status === 'denied') {
+                 errorToThrow = new Error("PERM_DENIED");
+             }
+        }
+      } else {
+          // Any other error (e.g. Device in use, NotFound) also effectively "denies" access for now
+          setPermissionState('denied');
+      }
+
+      if (throwOnError && errorToThrow) throw errorToThrow;
     }
+  };
+
+  const retryMedia = async () => {
+    // Fail fast if we know it's a hard block
+    const status = await checkPermissions();
+    if (status === 'denied') {
+        setPermissionState('denied');
+        throw new Error("PERM_DENIED");
+    }
+    
+    setPermissionState('initial');
+    await refreshLocalStream(undefined, true);
   };
 
   const switchDevice = async (deviceId: string) => {
@@ -170,7 +231,12 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   };
 
   const toggleMute = useCallback(() => {
-    if (!localStreamRef.current) return true;
+    // Auto-recovery: If no stream, try to start one
+    if (!localStreamRef.current) {
+        refreshLocalStream();
+        return false; // Assume unmuted attempt
+    }
+
     const track = localStreamRef.current.getAudioTracks()[0];
     if (!track) return true;
 
@@ -425,5 +491,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     audioOutputDevices,
     selectedOutputDeviceId,
     switchOutputDevice,
+    permissionState,
+    retryMedia,
   };
 }
