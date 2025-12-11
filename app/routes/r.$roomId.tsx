@@ -87,37 +87,35 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDeviceId: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
 
+  // 1. Critical: Handle Stream & Playback
   useEffect(() => {
-    if (audioRef.current) {
-      audioRef.current.srcObject = stream;
-      // Explicitly attempt to play to avoid "silent until interaction" issues
-      audioRef.current.play().catch(e => console.warn("Auto-play blocked:", e));
+    const el = audioRef.current;
+    if (el && stream) {
+      el.srcObject = stream;
+      // Force playback immediately, regardless of device settings
+      el.play().catch((e) => console.error("Auto-play error:", e));
     }
   }, [stream]);
 
+  // 2. Optional: Handle Device Switching
   useEffect(() => {
-    const audioEl = audioRef.current;
-    if (!audioEl) return;
-
-    if (outputDeviceId) {
-      if ('setSinkId' in audioEl && typeof (audioEl as any).setSinkId === 'function') {
-        (audioEl as any).setSinkId(outputDeviceId)
-            .then(() => {
-                // Success - play just in case
-                audioEl.play().catch(e => console.warn("Play failed after sink change:", e));
-            })
-            .catch((err: unknown) => {
-                console.warn("Failed to set output device (sinkId), continuing with default:", err);
-                // Critical: Ensure audio keeps playing even if switch failed
-                audioEl.play().catch(e => console.warn("Play failed in sink error handler:", e));
-            });
-      } else {
-        console.warn("setSinkId not supported on this browser.");
+    const el = audioRef.current;
+    if (el && outputDeviceId) {
+      // Feature detection first
+      if ('setSinkId' in el && typeof (el as any).setSinkId === 'function') {
+        (el as any).setSinkId(outputDeviceId)
+          .catch((err: unknown) => {
+             console.warn("Failed to set sinkId:", err);
+             // Verify playback is still active after failed switch
+             if (el.paused) {
+                el.play().catch(e => console.warn("Recovery play failed:", e));
+             }
+          });
       }
     }
   }, [outputDeviceId]);
 
-  return <audio ref={audioRef} autoPlay playsInline />;
+  return <audio ref={audioRef} autoPlay playsInline controls={false} />;
 }
 
 function PeerCard({ 
