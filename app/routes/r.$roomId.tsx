@@ -155,7 +155,7 @@ function PeerCard({
 
       {/* User Info */}
       <div className="text-center px-4 w-full">
-        <h3 className="font-semibold text-neutral-200 truncate w-full">
+        <h3 className="font-semibold text-card-foreground truncate w-full">
           {isLocal ? "You" : `Peer ${id.slice(0, 4)}`}
         </h3>
         {micLabel && (
@@ -352,7 +352,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             {peers.length === 0 && (
                 <div className="border border-dashed border-border rounded-xl bg-muted/30 h-48 md:h-56 flex flex-col items-center justify-center text-muted-foreground gap-2 animate-in fade-in duration-700 delay-100">
                     <Users className="w-8 h-8 opacity-20" />
-                    <span className="text-sm font-medium">Waiting for peers...</span>
+                    <span className="text-sm font-medium text-muted-foreground/90">Waiting for peers...</span>
                     <Button variant="link" className="text-muted-foreground" onClick={handleShare}>
                         Invite someone
                     </Button>
@@ -368,7 +368,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             {/* Mute Toggle */}
             <Button
                 size="icon"
-                className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' : 'bg-muted hover:bg-muted/80 text-foreground'}`}
+                className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' : 'bg-muted hover:bg-neutral-200 dark:hover:bg-white/10 text-foreground'}`}
                 onClick={handleMuteToggle}
             >
                 {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
@@ -378,7 +378,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted"
+                className={`rounded-full w-12 h-12 transition-all ${isSpeaker ? 'bg-neutral-300 dark:bg-white/20 text-foreground ring-1 ring-border shadow-sm' : 'text-muted-foreground hover:bg-neutral-200 dark:hover:bg-white/10 hover:text-foreground'}`}
                 onClick={handleSpeakerToggle}
             >
                 {isSpeaker ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
@@ -388,7 +388,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted transition-transform duration-300 hover:scale-110 active:scale-95"
+                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-neutral-200 dark:hover:bg-white/10 transition-transform duration-300 hover:scale-110 active:scale-95"
                 onClick={handleShare}
             >
                 <Share2 className="h-5 w-5" />
@@ -397,7 +397,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             {/* Settings Dialog */}
             <Dialog>
                 <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-muted">
+                    <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-neutral-200 dark:hover:bg-white/10">
                         <Settings className="h-5 w-5" />
                     </Button>
                 </DialogTrigger>
@@ -477,7 +477,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-12 h-12 text-red-500 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-500/20 dark:hover:text-red-300 transition-all duration-200"
+                className="rounded-full w-12 h-12 text-red-500 hover:bg-red-100 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-500/20 dark:hover:text-red-300 transition-all duration-200"
                 onClick={handleLeave}
             >
                 <PhoneOff className="h-5 w-5" />
