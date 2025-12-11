@@ -18,6 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "~/components/ui/tooltip";
 import { 
   Settings, 
   Mic, 
@@ -363,44 +369,74 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
       {/* Bottom Floating Control Bar */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 w-auto max-w-[90vw] animate-in slide-in-from-bottom-10 fade-in duration-500 delay-200">
-        <div className="bg-background/80 backdrop-blur-md border border-border shadow-2xl rounded-full px-4 h-16 flex items-center gap-2 md:gap-4 ring-1 ring-black/5">
+        <TooltipProvider delayDuration={0}>
+          <div className="bg-background/80 backdrop-blur-md border border-border shadow-2xl rounded-full px-4 h-16 flex items-center gap-2 md:gap-4 ring-1 ring-black/5">
             
             {/* Mute Toggle */}
-            <Button
-                size="icon"
-                className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' : 'bg-muted hover:bg-neutral-200 dark:hover:bg-white/10 text-foreground'}`}
-                onClick={handleMuteToggle}
-            >
-                {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant={isMuted ? "default" : "ghost"}
+                  className={`rounded-full w-12 h-12 transition-all ${isMuted ? 'bg-destructive hover:bg-destructive/90 text-destructive-foreground shadow-lg shadow-destructive/20' : 'hover:bg-neutral-200 dark:hover:bg-white/10 text-foreground'}`}
+                  onClick={handleMuteToggle}
+                >
+                  {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isMuted ? "Unmute" : "Mute"}</p>
+              </TooltipContent>
+            </Tooltip>
 
             {/* Output Toggle */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className={`rounded-full w-12 h-12 transition-all ${isSpeaker ? 'bg-neutral-300 dark:bg-white/20 text-foreground ring-1 ring-border shadow-sm' : 'text-muted-foreground hover:bg-neutral-200 dark:hover:bg-white/10 hover:text-foreground'}`}
-                onClick={handleSpeakerToggle}
-            >
-                {isSpeaker ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`rounded-full w-12 h-12 transition-all ${isSpeaker ? 'bg-primary text-primary-foreground shadow-md hover:bg-primary/90' : 'text-muted-foreground hover:bg-neutral-200 dark:hover:bg-white/10 hover:text-foreground'}`}
+                  onClick={handleSpeakerToggle}
+                >
+                  {isSpeaker ? <Volume2 className="h-5 w-5" /> : <Phone className="h-5 w-5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Toggle Speaker</p>
+              </TooltipContent>
+            </Tooltip>
 
              {/* Share Button (New) */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-neutral-200 dark:hover:bg-white/10 transition-transform duration-300 hover:scale-110 active:scale-95"
-                onClick={handleShare}
-            >
-                <Share2 className="h-5 w-5" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-neutral-200 dark:hover:bg-white/10 transition-transform duration-300 hover:scale-110 active:scale-95"
+                  onClick={handleShare}
+                >
+                  <Share2 className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Share Room</p>
+              </TooltipContent>
+            </Tooltip>
 
             {/* Settings Dialog */}
             <Dialog>
-                <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-neutral-200 dark:hover:bg-white/10">
-                        <Settings className="h-5 w-5" />
-                    </Button>
-                </DialogTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <DialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="rounded-full w-12 h-12 text-muted-foreground hover:text-foreground hover:bg-neutral-200 dark:hover:bg-white/10">
+                          <Settings className="h-5 w-5" />
+                      </Button>
+                  </DialogTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Audio Settings</p>
+                </TooltipContent>
+              </Tooltip>
                 <DialogContent className="bg-background border-border text-foreground">
                 <DialogHeader>
                     <DialogTitle>Audio Settings</DialogTitle>
@@ -474,15 +510,23 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <div className="w-px h-6 bg-border mx-2" />
 
              {/* Leave Button */}
-            <Button
-                variant="ghost"
-                size="icon"
-                className="rounded-full w-12 h-12 text-red-500 hover:bg-red-100 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-500/20 dark:hover:text-red-300 transition-all duration-200"
-                onClick={handleLeave}
-            >
-                <PhoneOff className="h-5 w-5" />
-            </Button>
-        </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="rounded-full w-12 h-12 text-red-500 hover:bg-red-100 hover:text-red-600 dark:text-red-400 dark:hover:bg-red-500/20 dark:hover:text-red-300 transition-all duration-200"
+                  onClick={handleLeave}
+                >
+                  <PhoneOff className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Disconnect</p>
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </TooltipProvider>
       </div>
     </div>
   );
