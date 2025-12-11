@@ -24,6 +24,7 @@ export const links: Route.LinksFunction = () => [
   },
 
   { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },
+  { rel: "apple-touch-icon", href: "/icon-512.png" },
 ];
 
 import { ThemeProvider } from "~/components/theme-provider";
@@ -39,7 +40,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         />
         <meta name="theme-color" content="#09090b" />
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" href="/icon.svg" />
         <Meta />
         <Links />
         <script
