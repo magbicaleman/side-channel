@@ -150,8 +150,8 @@ function PeerCard({
     <Card className={`bg-card border-border relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-primary/50 animate-in fade-in zoom-in-95 duration-500 ${permissionError ? 'border-destructive/50' : ''}`}>
       {/* Status Overlay */}
       <div className="absolute top-3 right-3 flex gap-2">
-        {muted ? (
-          <div className="bg-destructive/20 text-destructive rounded-full p-1.5 backdrop-blur-sm">
+        {muted || !stream ? (
+          <div className={`rounded-full p-1.5 backdrop-blur-sm ${!stream && !permissionError ? 'bg-muted/50 text-muted-foreground' : 'bg-destructive/20 text-destructive'}`}>
             <MicOff className="w-4 h-4" />
           </div>
         ) : (
@@ -398,6 +398,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                 id={clientId} 
                 isLocal={true} 
                 muted={isMuted}
+                stream={localStream || undefined}
                 micLabel={selectedDeviceLabel}
 
                 permissionError={permissionState === 'denied' || !localStream}

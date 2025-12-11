@@ -62,7 +62,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <Toaster />
+        <Toaster closeButton richColors />
         <ScrollRestoration />
         <script
           dangerouslySetInnerHTML={{
