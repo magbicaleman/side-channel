@@ -308,21 +308,28 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleShare = async () => {
-    if (!canShare) {
-        handleCopyLink();
-        return;
-    }
+  /* Smart Share Logic */
+  const handleHeaderShare = async () => {
     try {
-      await navigator.share({
-        title: `Join my room: ${roomId}`,
-        text: "Hop into this Side Channel room",
-        url: window.location.href,
-      });
+        if (typeof navigator !== 'undefined' && navigator.share) {
+            await navigator.share({
+                title: 'Join SideChannel', 
+                text: 'Join my voice room', 
+                url: window.location.href 
+            });
+        } else {
+            throw new Error("Generic Share Fallback");
+        }
     } catch (error) {
-       // Ignore abort errors
+        // Ignore user cancellation
+        if (error instanceof Error && error.name === 'AbortError') return;
+        // Fallback to clipboard if share fails (e.g. not supported)
+        handleCopyLink();
     }
   };
+
+  // Keep legacy handleShare for other buttons if needed, or alias it
+  const handleShare = handleHeaderShare;
 
   const handleSpeakerToggle = () => {
     if (!audioOutputDevices || audioOutputDevices.length === 0) {
@@ -369,14 +376,22 @@ export default function Room({ loaderData }: Route.ComponentProps) {
             <h1 className="text-sm font-medium text-neutral-400 font-mono tracking-tight">
               {roomId}
             </h1>
-            <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-6 w-6 text-neutral-500 hover:text-white"
-                onClick={handleCopyLink}
-            >
-                {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-            </Button>
+           {/* Smart Share Button */}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6 text-neutral-500 hover:text-white hover:bg-white/10 transition-colors"
+                    onClick={handleHeaderShare}
+                >
+                    {copied ? <Check className="h-3 w-3" /> : <Share2 className="h-3 w-3" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Share Room Link</p>
+              </TooltipContent>
+            </Tooltip>
         </div>
         
         {/* Client ID Badge */}
