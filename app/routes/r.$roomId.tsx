@@ -1,6 +1,7 @@
 import { type LoaderFunctionArgs, useNavigate } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
+import { useAudioVisualizer } from "~/hooks/useAudioVisualizer";
 import { Button } from "~/components/ui/button";
 import { ModeToggle } from "~/components/mode-toggle";
 import { Card } from "~/components/ui/card";
@@ -192,6 +193,9 @@ function PeerCard({
   onRetry?: () => void;
   isRequesting?: boolean;
 }) {
+  const visualizerRef = useRef<HTMLDivElement>(null);
+  useAudioVisualizer(stream, visualizerRef);
+
   return (
     <Card className={`bg-card border-border relative overflow-hidden h-48 md:h-56 flex flex-col items-center justify-center transition-all hover:border-primary/50 animate-in fade-in zoom-in-95 duration-500 ${permissionError ? 'border-destructive/50' : ''}`}>
       {/* Status Overlay */}
@@ -208,8 +212,17 @@ function PeerCard({
       </div>
 
       {/* Avatar Circle */}
-      <div className={`w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-2xl md:text-3xl font-bold mb-4 shadow-xl ${isLocal ? 'bg-primary/20 text-primary border-2 border-primary/30' : 'bg-muted text-muted-foreground border-2 border-border'}`}>
-        {id.slice(0, 2).toUpperCase()}
+      <div className="relative mb-4">
+        {/* Visualizer Ring */}
+        {!muted && stream && (
+          <div 
+            ref={visualizerRef}
+            className="absolute -inset-1 rounded-full border-2 border-green-500/40 bg-green-500/10 z-0 opacity-40 shadow-[0_0_15px_rgba(34,197,94,0.2)]"
+          />
+        )}
+        <div className={`relative z-10 w-20 h-20 md:w-24 md:h-24 rounded-full flex items-center justify-center text-2xl md:text-3xl font-bold shadow-xl ${isLocal ? 'bg-primary/20 text-primary border-2 border-primary/30' : 'bg-muted text-muted-foreground border-2 border-border'}`}>
+          {id.slice(0, 2).toUpperCase()}
+        </div>
       </div>
 
       {/* User Info */}
