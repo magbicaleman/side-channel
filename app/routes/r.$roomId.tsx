@@ -35,7 +35,8 @@ import {
   Check, 
   PhoneOff,
   Users,
-  Loader2
+  Loader2,
+  Play
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Route } from "./+types/r.$roomId";
@@ -93,6 +94,8 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
 
 function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDeviceId: string }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [autoplayBlocked, setAutoplayBlocked] = useState(false);
 
   // 1. Critical: Handle Stream & Playback
   useEffect(() => {
@@ -100,7 +103,16 @@ function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDe
     if (el && stream) {
       el.srcObject = stream;
       // Force playback immediately, regardless of device settings
-      el.play().catch((e) => console.error("Auto-play error:", e));
+      el.play()
+        .then(() => {
+          setIsPlaying(true);
+          setAutoplayBlocked(false);
+        })
+        .catch((e) => {
+          console.warn("Autoplay blocked:", e);
+          setAutoplayBlocked(true);
+          setIsPlaying(false);
+        });
     }
   }, [stream]);
 
@@ -122,7 +134,41 @@ function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDe
     }
   }, [outputDeviceId]);
 
-  return <audio ref={audioRef} autoPlay playsInline controls={false} />;
+  const handleManualPlay = () => {
+    if (audioRef.current) {
+      audioRef.current.play()
+        .then(() => {
+          setIsPlaying(true);
+          setAutoplayBlocked(false);
+        })
+        .catch(console.error);
+    }
+  };
+
+  return (
+    <>
+      <audio ref={audioRef} autoPlay playsInline controls={false} />
+      {autoplayBlocked && (
+        <div 
+          className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm cursor-pointer group"
+          onClick={handleManualPlay}
+        >
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="bg-primary text-primary-foreground rounded-full p-4 shadow-2xl transition-transform group-hover:scale-110 active:scale-95">
+                  <Play className="w-8 h-8 fill-current" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Click to hear this peer (Autoplay blocked)</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
+    </>
+  );
 }
 
 function PeerCard({ 

@@ -60,6 +60,10 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       
       setAudioDevices(audioInputs);
       setAudioOutputDevices(audioOutputs);
+
+      // If we have devices but no labels, it usually means permissions weren't fully granted yet
+      // or the browser is protecting labels before first use.
+      // We don't need to do anything special here as getUserMedia will eventually fix this.
       
       // Smart Fallback: Input
       // If currently selected mic is gone, we must refresh stream to default
@@ -128,15 +132,9 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
       }
 
-      // Restore mute state
-      // Restore mute state
-      if (wasMuted) {
-         // This block was malformed in previous edit
-      }
-
       localStreamRef.current = stream;
       setLocalStream(stream);
-      
+
       // Restore mute state
       const track = stream.getAudioTracks()[0];
       if (track && wasMuted) {
