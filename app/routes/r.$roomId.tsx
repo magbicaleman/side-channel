@@ -100,6 +100,7 @@ function AudioPlayer({
   stream: MediaStream;
   outputDeviceId?: string;
 }) {
+  const FORCE_PLAY_EVENT = "sidechannel:force-play";
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
@@ -122,6 +123,27 @@ function AudioPlayer({
         });
     }
   }, [stream]);
+
+  // 1b. Global recovery: allow a single user gesture to unblock all peer audio players (iOS/Safari).
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+
+    const handleForcePlay = () => {
+      if (!el.srcObject) return;
+      el.play()
+        .then(() => {
+          setIsPlaying(true);
+          setAutoplayBlocked(false);
+        })
+        .catch(() => {
+          // Still blocked; keep the per-card overlay.
+        });
+    };
+
+    window.addEventListener(FORCE_PLAY_EVENT as any, handleForcePlay as any);
+    return () => window.removeEventListener(FORCE_PLAY_EVENT as any, handleForcePlay as any);
+  }, []);
 
   // 2. Optional: Handle Device Switching
   useEffect(() => {
@@ -154,7 +176,7 @@ function AudioPlayer({
 
   return (
     <>
-      <audio ref={audioRef} autoPlay playsInline controls={false} />
+      <audio ref={audioRef} autoPlay playsInline controls={false} data-peer-audio="true" />
       {autoplayBlocked && (
         <div 
           className="absolute inset-0 z-20 flex items-center justify-center bg-background/60 backdrop-blur-sm cursor-pointer group"
@@ -265,6 +287,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     clientId: string;
     websocketUrl: string;
   };
+  const FORCE_PLAY_EVENT = "sidechannel:force-play";
   const navigate = useNavigate();
   const [status, setStatus] = useState("Disconnected");
   const [socket, setSocket] = useState<WebSocket | null>(null);
@@ -303,6 +326,36 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   useEffect(() => {
     setCanShare(typeof navigator !== "undefined" && typeof navigator.share === "function");
     setSupportsSetSinkId(typeof window !== 'undefined' && 'setSinkId' in HTMLMediaElement.prototype);
+  }, []);
+
+  // Autoplay hardening: a single user gesture should attempt to start all remote audio elements.
+  useEffect(() => {
+    let ran = false;
+
+    const tryPlayAll = () => {
+      if (ran) return;
+      ran = true;
+
+      document
+        .querySelectorAll<HTMLAudioElement>('audio[data-peer-audio="true"]')
+        .forEach((el) => el.play().catch(() => {}));
+
+      window.dispatchEvent(new Event(FORCE_PLAY_EVENT));
+
+      window.removeEventListener("pointerdown", tryPlayAll);
+      window.removeEventListener("touchstart", tryPlayAll);
+      window.removeEventListener("keydown", tryPlayAll);
+    };
+
+    window.addEventListener("pointerdown", tryPlayAll, { passive: true });
+    window.addEventListener("touchstart", tryPlayAll, { passive: true });
+    window.addEventListener("keydown", tryPlayAll);
+
+    return () => {
+      window.removeEventListener("pointerdown", tryPlayAll);
+      window.removeEventListener("touchstart", tryPlayAll);
+      window.removeEventListener("keydown", tryPlayAll);
+    };
   }, []);
 
   // Initialize WebRTC
@@ -395,18 +448,18 @@ export default function Room({ loaderData }: Route.ComponentProps) {
   const handleShare = handleHeaderShare;
 
   const handleSpeakerToggle = () => {
-    if (!audioOutputDevices || audioOutputDevices.length === 0) {
-      toast("No output devices found", {
-        description: "Please use system controls to switch audio output.",
-      });
-      return;
-    }
-
     if (!supportsSetSinkId) {
         toast("System audio control required", {
-            description: "Please use your device's Control Center or AirPlay menu to switch speakers.",
+            description: "To switch to Speaker/Earpiece, use the AirPlay / Control Center controls on your device.",
         });
         return;
+    }
+
+    if (!audioOutputDevices || audioOutputDevices.length === 0) {
+      toast("No alternate output devices detected", {
+        description: "Audio will use your system default output.",
+      });
+      return;
     }
     
     const currentIndex = audioOutputDevices.findIndex(d => d.deviceId === selectedOutputDeviceId);

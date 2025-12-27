@@ -38,6 +38,20 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
   const [audioOutputDevices, setAudioOutputDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedOutputDeviceId, setSelectedOutputDeviceId] = useState<string>("");
+
+  const redactId = (id: string | null | undefined) => (id ? `${id.slice(0, 6)}…` : null);
+
+  const debug = (...args: unknown[]) => {
+    if (typeof window === "undefined") return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const enabled =
+        params.get("debug") === "1" || window.localStorage.getItem("sidechannel_debug") === "1";
+      if (enabled) console.debug("[useWebRTC]", ...args);
+    } catch {
+      // ignore
+    }
+  };
   
   // State: Simplistic array of peers
   // We use a Map internally for O(1) lookups during signaling, but sync to an array for the UI
@@ -60,6 +74,14 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       
       setAudioDevices(audioInputs);
       setAudioOutputDevices(audioOutputs);
+      debug("devices", {
+        audioInputs: audioInputs.length,
+        audioOutputs: audioOutputs.length,
+        hasSelectedDeviceId: Boolean(selectedDeviceId),
+        hasSelectedOutputDeviceId: Boolean(selectedOutputDeviceId),
+        labelsAvailable:
+          audioInputs.some((d) => Boolean(d.label)) || audioOutputs.some((d) => Boolean(d.label)),
+      });
 
       // If we have devices but no labels, it usually means permissions weren't fully granted yet
       // or the browser is protecting labels before first use.
@@ -119,6 +141,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     const wasMuted = localStreamRef.current?.getAudioTracks()[0]?.enabled === false;
     
     try {
+      debug("refreshLocalStream:start", { hasRequestedDeviceId: Boolean(deviceId) });
       const constraints = { ...MEDIA_CONSTRAINTS };
       if (deviceId) {
         // @ts-expect-error - deviceId is valid in constraints
@@ -147,6 +170,19 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
         if (settings.deviceId) {
           setSelectedDeviceId(settings.deviceId);
         }
+        debug("refreshLocalStream:track", {
+          hasLabel: Boolean(track.label),
+          hasDeviceId: Boolean(settings.deviceId),
+          sampleRate: typeof settings.sampleRate === "number" ? settings.sampleRate : undefined,
+          channelCount:
+            typeof settings.channelCount === "number" ? settings.channelCount : undefined,
+          echoCancellation:
+            typeof settings.echoCancellation === "boolean" ? settings.echoCancellation : undefined,
+          noiseSuppression:
+            typeof settings.noiseSuppression === "boolean" ? settings.noiseSuppression : undefined,
+          autoGainControl:
+            typeof settings.autoGainControl === "boolean" ? settings.autoGainControl : undefined,
+        });
       }
 
       // Sync mute state
@@ -175,6 +211,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       setPermissionState('granted');
     } catch (err: any) {
       console.error("Failed to get user media:", err);
+      debug("refreshLocalStream:error", { name: err?.name, message: err?.message });
       
       // Critical: Ensure we clear the stream on error so the UI shows "Enable Mic"
       localStreamRef.current = null;
@@ -249,18 +286,26 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
 
   // Init Audio
   useEffect(() => {
-    let mounted = true;
     refreshLocalStream().catch(console.error);
 
     // devicechange listener
     const handleDeviceChange = () => {
         getAudioDevices();
     };
-    navigator.mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    const mediaDevices = navigator.mediaDevices;
+    const previousOnDeviceChange = (mediaDevices as any)?.ondevicechange;
+    if (mediaDevices?.addEventListener) {
+      mediaDevices.addEventListener("devicechange", handleDeviceChange);
+    } else if (mediaDevices) {
+      (mediaDevices as any).ondevicechange = handleDeviceChange;
+    }
 
     return () => {
-      mounted = false;
-      navigator.mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+      if (mediaDevices?.removeEventListener) {
+        mediaDevices.removeEventListener("devicechange", handleDeviceChange);
+      } else if (mediaDevices) {
+        (mediaDevices as any).ondevicechange = previousOnDeviceChange ?? null;
+      }
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
       }
@@ -280,6 +325,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     }
 
     const pc = new RTCPeerConnection(STUN_SERVERS);
+    debug("pc:create", { targetClientId: redactId(targetClientId) });
 
     // Add local tracks
     if (localStreamRef.current) {
@@ -302,17 +348,32 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
 
     // Remote Track
     pc.ontrack = (event) => {
-      const remoteStream = event.streams[0];
-      if (!remoteStream) return;
-
       setPeersMap((prev) => {
         const next = new Map(prev);
-        // Preserve muted state if we knew about it, default to false
         const existing = next.get(targetClientId);
-        next.set(targetClientId, { 
-          id: targetClientId, 
-          stream: remoteStream, 
-          muted: existing?.muted ?? false 
+        const streamFromEvent = event.streams?.[0];
+        debug("pc:ontrack", {
+          targetClientId: redactId(targetClientId),
+          hasStreams: Boolean(streamFromEvent),
+          trackKind: event.track?.kind,
+        });
+
+        let stream = streamFromEvent ?? existing?.stream;
+        if (!stream) {
+          stream = new MediaStream();
+        }
+
+        // Some browsers (or some track/negotiation paths) may not populate `event.streams`.
+        // Ensure we still attach the track so remote audio plays.
+        if (!streamFromEvent && event.track) {
+          const hasTrack = stream.getTracks().some((t) => t.id === event.track.id);
+          if (!hasTrack) stream.addTrack(event.track);
+        }
+
+        next.set(targetClientId, {
+          id: targetClientId,
+          stream,
+          muted: existing?.muted ?? false,
         });
         return next;
       });
@@ -414,6 +475,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     if (localStreamRef.current && !joinedRef.current && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "join", clientId }));
       joinedRef.current = true;
+      debug("socket:join");
     }
 
     const handleMessage = async (event: MessageEvent) => {
@@ -451,6 +513,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
        if (localStreamRef.current && !joinedRef.current) {
           socket.send(JSON.stringify({ type: "join", clientId }));
           joinedRef.current = true;
+          debug("socket:join:onOpen");
        }
     };
     socket.addEventListener("open", onOpen);
