@@ -93,7 +93,13 @@ export async function loader({ request, params, context }: LoaderFunctionArgs) {
   }, { headers });
 }
 
-function AudioPlayer({ stream, outputDeviceId }: { stream: MediaStream; outputDeviceId: string }) {
+function AudioPlayer({
+  stream,
+  outputDeviceId,
+}: {
+  stream: MediaStream;
+  outputDeviceId?: string;
+}) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [autoplayBlocked, setAutoplayBlocked] = useState(false);
@@ -248,9 +254,7 @@ function PeerCard({
       )}
 
       {/* Audio Element for Remote Peers */}
-      {!isLocal && stream && outputDeviceId && (
-        <AudioPlayer stream={stream} outputDeviceId={outputDeviceId} />
-      )}
+      {!isLocal && stream && <AudioPlayer stream={stream} outputDeviceId={outputDeviceId} />}
     </Card>
   );
 }
