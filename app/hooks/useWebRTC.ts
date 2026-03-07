@@ -15,9 +15,12 @@ const getMediaConstraints = (audioProfile: AudioProfile) => ({
   audio:
     audioProfile === "music"
       ? {
-          echoCancellation: false,
+          // Keep echo cancellation enabled so local beat/remote audio does not feed back into the mic.
+          echoCancellation: true,
           noiseSuppression: false,
           autoGainControl: false,
+          // Preserve the mobile routing hint used by the original voice flow.
+          googEchoCancellation: true,
         }
       : {
           echoCancellation: true,

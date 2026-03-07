@@ -169,7 +169,7 @@ export function useBeatEngine({
   }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (typeof window === "undefined" || beatState.mode !== "cypher") return;
 
     const unlock = () => {
       void ensureAudioReady()
@@ -188,7 +188,7 @@ export function useBeatEngine({
       window.removeEventListener("pointerdown", unlock);
       window.removeEventListener("keydown", unlock);
     };
-  }, [ensureAudioReady]);
+  }, [beatState.mode, ensureAudioReady]);
 
   useEffect(() => {
     if (!socket) return;
@@ -259,11 +259,15 @@ export function useBeatEngine({
     if (!engine) return;
 
     const transport = engine.Tone.getTransport();
+    const rawContext = engine.Tone.getContext().rawContext;
 
     if (!audioReady || beatState.mode !== "cypher") {
       transport.stop();
       transport.seconds = 0;
       setActiveStep(-1);
+      if ("suspend" in rawContext && rawContext.state === "running") {
+        void (rawContext as AudioContext).suspend().catch(() => {});
+      }
       return;
     }
 
