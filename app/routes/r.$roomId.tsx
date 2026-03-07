@@ -2,6 +2,7 @@ import { type LoaderFunctionArgs, useNavigate } from "react-router";
 import { useEffect, useState, useRef } from "react";
 import { useWebRTC } from "~/hooks/useWebRTC";
 import { useAudioVisualizer } from "~/hooks/useAudioVisualizer";
+import { useBeatEngine } from "~/hooks/useBeatEngine";
 import { Button } from "~/components/ui/button";
 import { ModeToggle } from "~/components/mode-toggle";
 import { Card } from "~/components/ui/card";
@@ -32,7 +33,6 @@ import {
   Share2, 
   Volume2, 
   Phone, 
-  Copy, 
   Check, 
   PhoneOff,
   Users,
@@ -40,6 +40,7 @@ import {
   Play
 } from "lucide-react";
 import { toast } from "sonner";
+import { BEAT_LANES, BEAT_PRESETS, type BeatLane, type BeatPresetId, type BeatRoomState, type RoomMode } from "~/lib/beat";
 import type { Route } from "./+types/r.$roomId";
 
 export async function loader({ request, params, context }: LoaderFunctionArgs) {
@@ -281,6 +282,252 @@ function PeerCard({
   );
 }
 
+const LANE_STYLES: Record<BeatLane, { label: string; active: string; idle: string }> = {
+  kick: {
+    label: "Kick",
+    active: "bg-amber-500 text-black hover:bg-amber-400",
+    idle: "bg-amber-500/10 text-amber-200 hover:bg-amber-500/20",
+  },
+  snare: {
+    label: "Snare",
+    active: "bg-emerald-500 text-black hover:bg-emerald-400",
+    idle: "bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20",
+  },
+  hat: {
+    label: "Hat",
+    active: "bg-sky-500 text-black hover:bg-sky-400",
+    idle: "bg-sky-500/10 text-sky-200 hover:bg-sky-500/20",
+  },
+};
+
+function BeatDeck({
+  mode,
+  beatState,
+  activeStep,
+  audioReady,
+  engineLoaded,
+  clockRttMs,
+  onModeChange,
+  onEnsureAudio,
+  onPresetChange,
+  onBpmChange,
+  onPlay,
+  onStop,
+  onToggleStep,
+}: {
+  mode: RoomMode;
+  beatState: BeatRoomState;
+  activeStep: number;
+  audioReady: boolean;
+  engineLoaded: boolean;
+  clockRttMs: number | null;
+  onModeChange: (mode: RoomMode) => void;
+  onEnsureAudio: () => Promise<boolean>;
+  onPresetChange: (presetId: BeatPresetId) => Promise<void>;
+  onBpmChange: (bpm: number) => void;
+  onPlay: () => Promise<void>;
+  onStop: () => void;
+  onToggleStep: (lane: BeatLane, stepIndex: number) => Promise<void>;
+}) {
+  const [draftBpm, setDraftBpm] = useState(beatState.bpm);
+
+  useEffect(() => {
+    setDraftBpm(beatState.bpm);
+  }, [beatState.bpm]);
+
+  const commitBpm = () => {
+    if (draftBpm !== beatState.bpm) {
+      onBpmChange(draftBpm);
+    }
+  };
+
+  return (
+    <Card className="border-border/70 bg-gradient-to-br from-zinc-950 via-zinc-950 to-zinc-900 text-zinc-50 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+      <div className="space-y-6 p-5 md:p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-3">
+            <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
+              <Button
+                variant={mode === "talk" ? "default" : "ghost"}
+                className={`rounded-full px-4 ${mode === "talk" ? "" : "text-zinc-300 hover:text-white hover:bg-white/10"}`}
+                onClick={() => onModeChange("talk")}
+              >
+                Talk
+              </Button>
+              <Button
+                variant={mode === "cypher" ? "default" : "ghost"}
+                className={`rounded-full px-4 ${mode === "cypher" ? "" : "text-zinc-300 hover:text-white hover:bg-white/10"}`}
+                onClick={() => onModeChange("cypher")}
+              >
+                Cypher
+              </Button>
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Room Modes</h2>
+              <p className="max-w-2xl text-sm text-zinc-400">
+                `Talk` keeps the room optimized for conversation. `Cypher` switches the room into a synced local beat deck so everyone hears the same generated pattern without streaming an audio file.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm text-zinc-300 md:w-[320px]">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Mic Profile</div>
+              <div className="mt-1 font-medium text-white">{mode === "cypher" ? "Music" : "Voice"}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
+              <div className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">Clock Sync</div>
+              <div className="mt-1 font-medium text-white">
+                {clockRttMs == null ? "Calibrating" : `${Math.round(clockRttMs)} ms RTT`}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {mode === "talk" ? (
+          <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-zinc-300">
+            <p className="font-medium text-white">Voice-first room</p>
+            <p className="mt-2 max-w-3xl text-zinc-400">
+              Use this when you only need conversation. Switch to `Cypher` to unlock the shared 16-step beat sequencer and the flatter music mic profile.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.9fr)]">
+            <div className="space-y-4 rounded-3xl border border-white/10 bg-black/20 p-4 md:p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+                  <div className="space-y-2">
+                    <label className="text-xs uppercase tracking-[0.2em] text-zinc-500">Preset</label>
+                    <Select value={beatState.presetId === "custom" ? undefined : beatState.presetId} onValueChange={(value) => void onPresetChange(value as BeatPresetId)}>
+                      <SelectTrigger className="border-white/10 bg-white/5 text-white">
+                        <SelectValue placeholder="Custom Pattern">
+                          {beatState.presetId === "custom"
+                            ? "Custom Pattern"
+                            : BEAT_PRESETS.find((preset) => preset.id === beatState.presetId)?.label}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent className="border-zinc-800 bg-zinc-950 text-zinc-50">
+                        {BEAT_PRESETS.map((preset) => (
+                          <SelectItem key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-zinc-500">
+                      <label htmlFor="beat-bpm">Tempo</label>
+                      <span>{draftBpm} BPM</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <input
+                        id="beat-bpm"
+                        type="range"
+                        min={60}
+                        max={220}
+                        value={draftBpm}
+                        onChange={(event) => setDraftBpm(Number(event.target.value))}
+                        onPointerUp={commitBpm}
+                        onKeyUp={(event) => {
+                          if (event.key === "Enter") commitBpm();
+                        }}
+                        className="h-2 w-full cursor-pointer appearance-none rounded-full bg-white/10 accent-white"
+                      />
+                      <input
+                        type="number"
+                        min={60}
+                        max={220}
+                        value={draftBpm}
+                        onChange={(event) => setDraftBpm(Number(event.target.value))}
+                        onBlur={commitBpm}
+                        className="w-20 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {!audioReady && (
+                    <Button
+                      variant="outline"
+                      className="border-white/10 bg-white/5 text-white hover:bg-white/10"
+                      onClick={() => void onEnsureAudio()}
+                    >
+                      Warm Up Audio
+                    </Button>
+                  )}
+                  {beatState.isPlaying ? (
+                    <Button className="rounded-full px-5" onClick={onStop}>
+                      Stop Beat
+                    </Button>
+                  ) : (
+                    <Button className="rounded-full px-5" onClick={() => void onPlay()}>
+                      <Play className="mr-2 h-4 w-4 fill-current" />
+                      Start Beat
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {BEAT_LANES.map((lane) => (
+                  <div key={lane} className="grid grid-cols-[72px_minmax(0,1fr)] items-center gap-3">
+                    <div className="text-xs uppercase tracking-[0.2em] text-zinc-500">{LANE_STYLES[lane].label}</div>
+                    <div className="grid grid-cols-8 gap-2 sm:grid-cols-16">
+                      {beatState.steps[lane].map((enabled, stepIndex) => {
+                        const isCurrent = activeStep === stepIndex && beatState.isPlaying;
+                        return (
+                          <button
+                            key={`${lane}-${stepIndex}`}
+                            type="button"
+                            onClick={() => void onToggleStep(lane, stepIndex)}
+                            className={`h-10 rounded-xl border text-[10px] font-semibold transition ${
+                              enabled ? LANE_STYLES[lane].active : LANE_STYLES[lane].idle
+                            } ${
+                              isCurrent ? "border-white shadow-[0_0_0_1px_rgba(255,255,255,0.8)]" : "border-white/10"
+                            } ${stepIndex % 4 === 0 ? "translate-y-[-1px]" : ""}`}
+                          >
+                            {stepIndex + 1}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-white/[0.04] p-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Cypher Notes</p>
+                <p className="mt-2 text-sm text-zinc-300">
+                  The beat is generated locally with Tone.js on each client. Only pattern state and transport timing are synchronized over the room socket.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <p className="text-sm font-medium text-white">Current Pattern</p>
+                <p className="mt-2 text-sm text-zinc-400">
+                  {beatState.presetId === "custom"
+                    ? "Custom sequence"
+                    : `${BEAT_PRESETS.find((preset) => preset.id === beatState.presetId)?.label} preset`}
+                </p>
+                <p className="mt-3 text-xs uppercase tracking-[0.2em] text-zinc-500">
+                  Engine {engineLoaded ? "ready" : "loading"} • Audio {audioReady ? "unlocked" : "locked"}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-zinc-400">
+                Headphones are still required. The shared beat stays tight because it is generated locally, but live vocals still depend on network latency.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 export default function Room({ loaderData }: Route.ComponentProps) {
   const { roomId, clientId, websocketUrl } = loaderData as {
     roomId: string;
@@ -358,6 +605,24 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     };
   }, []);
 
+  const {
+    beatState,
+    activeStep,
+    audioReady,
+    clockRttMs,
+    engineLoaded,
+    ensureAudioReady,
+    setMode,
+    setBpm,
+    applyPreset,
+    toggleStep,
+    play,
+    stop,
+  } = useBeatEngine({
+    socket,
+    clientId,
+  });
+
   // Initialize WebRTC
   const {
     localStream,
@@ -376,6 +641,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
     roomId,
     socket,
     clientId,
+    audioProfile: beatState.mode === "cypher" ? "music" : "voice",
   });
 
   const handleRetryMic = async () => {
@@ -474,6 +740,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
   const selectedDeviceLabel = audioDevices.find(d => d.deviceId === selectedDeviceId)?.label || "Default Mic";
   const selectedOutputLabel = audioOutputDevices.find(d => d.deviceId === selectedOutputDeviceId)?.label || "Default Speaker";
+  const currentMicProfileLabel = beatState.mode === "cypher" ? "Music" : "Voice";
   
   // Speaker is only "Active" if we have explicitly selected a non-default output AND the browser supports switching
   const isSpeakerActive = supportsSetSinkId && 
@@ -523,7 +790,24 @@ export default function Room({ loaderData }: Route.ComponentProps) {
 
       {/* Main Grid */}
       <main className="p-4 md:p-8 pb-32 max-w-[1600px] mx-auto animate-in fade-in duration-500">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
+        <div className="space-y-6">
+          <BeatDeck
+            mode={beatState.mode}
+            beatState={beatState}
+            activeStep={activeStep}
+            audioReady={audioReady}
+            engineLoaded={engineLoaded}
+            clockRttMs={clockRttMs}
+            onModeChange={setMode}
+            onEnsureAudio={ensureAudioReady}
+            onPresetChange={applyPreset}
+            onBpmChange={setBpm}
+            onPlay={play}
+            onStop={stop}
+            onToggleStep={toggleStep}
+          />
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 md:gap-6">
             {/* Local User Card */}
             <PeerCard 
                 id={clientId} 
@@ -560,6 +844,7 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                     </Button>
                 </div>
             )}
+          </div>
         </div>
       </main>
 
@@ -645,6 +930,11 @@ export default function Room({ loaderData }: Route.ComponentProps) {
                     <DialogTitle>Audio Settings</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-6 py-4">
+                    <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">{currentMicProfileLabel} mode</span>
+                        {" "}
+                        is active because the room is in {beatState.mode === "cypher" ? "Cypher" : "Talk"} mode.
+                    </div>
                     <div className="space-y-3">
                         <label className="text-sm font-medium text-muted-foreground">
                             Microphone

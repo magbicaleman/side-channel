@@ -9,21 +9,31 @@ const STUN_SERVERS = {
   ],
 };
 
-const MEDIA_CONSTRAINTS = {
-  audio: {
-    echoCancellation: true,
-    noiseSuppression: true,
-    autoGainControl: true,
-    // Google-specific constraint for mobile earpiece switching
-    googEchoCancellation: true,
-  },
+type AudioProfile = "voice" | "music";
+
+const getMediaConstraints = (audioProfile: AudioProfile) => ({
+  audio:
+    audioProfile === "music"
+      ? {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+        }
+      : {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          // Google-specific constraint for mobile earpiece switching
+          googEchoCancellation: true,
+        },
   video: false,
-};
+});
 
 interface UseWebRTCProps {
   roomId: string;
   socket: WebSocket | null;
   clientId: string | null;
+  audioProfile: AudioProfile;
 }
 
 export type PeerModel = {
@@ -32,7 +42,7 @@ export type PeerModel = {
   muted: boolean;
 };
 
-export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
+export function useWebRTC({ roomId, socket, clientId, audioProfile }: UseWebRTCProps) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -142,7 +152,7 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
     
     try {
       debug("refreshLocalStream:start", { hasRequestedDeviceId: Boolean(deviceId) });
-      const constraints = { ...MEDIA_CONSTRAINTS };
+      const constraints = getMediaConstraints(audioProfile);
       if (deviceId) {
         // @ts-expect-error - deviceId is valid in constraints
         constraints.audio = { ...constraints.audio, deviceId: { exact: deviceId } };
@@ -311,6 +321,11 @@ export function useWebRTC({ roomId, socket, clientId }: UseWebRTCProps) {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!localStreamRef.current) return;
+    refreshLocalStream(selectedDeviceId || undefined).catch(console.error);
+  }, [audioProfile]);
 
   // --- 2. Signaling & WebRTC ---
 

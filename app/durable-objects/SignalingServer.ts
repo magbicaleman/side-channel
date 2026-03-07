@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
+import { cloneBeatGrid, createDefaultBeatState, type BeatRoomState } from "~/lib/beat";
 
 // Validation schemas
 const JoinSchema = z.object({
@@ -20,7 +21,53 @@ const SignalSchema = z.object({
   senderClientId: z.string(),
 });
 
-const MessageSchema = z.union([JoinSchema, SignalSchema, MuteStateSchema]);
+const BeatPatternSchema = z.object({
+  kick: z.array(z.boolean()).length(16),
+  snare: z.array(z.boolean()).length(16),
+  hat: z.array(z.boolean()).length(16),
+});
+
+const BeatPresetIdSchema = z.enum(["boom-bap", "stutter-trap", "double-time", "custom"]);
+
+const BeatSetPatternSchema = z.object({
+  type: z.literal("beat-set-pattern"),
+  senderClientId: z.string(),
+  bpm: z.number().int().min(60).max(220),
+  steps: BeatPatternSchema,
+  presetId: BeatPresetIdSchema,
+});
+
+const BeatPlaySchema = z.object({
+  type: z.literal("beat-play"),
+  senderClientId: z.string(),
+});
+
+const RoomModeSchema = z.object({
+  type: z.literal("room-mode-set"),
+  senderClientId: z.string(),
+  mode: z.enum(["talk", "cypher"]),
+});
+
+const BeatStopSchema = z.object({
+  type: z.literal("beat-stop"),
+  senderClientId: z.string(),
+});
+
+const BeatSyncRequestSchema = z.object({
+  type: z.literal("beat-sync-request"),
+  clientSentAtMs: z.number().int(),
+});
+
+const MessageSchema = z.union([
+  JoinSchema,
+  SignalSchema,
+  MuteStateSchema,
+  BeatSetPatternSchema,
+  BeatPlaySchema,
+  RoomModeSchema,
+  BeatStopSchema,
+  BeatSyncRequestSchema,
+]);
 
 type Message = z.infer<typeof MessageSchema>;
 
@@ -29,6 +76,7 @@ export class SignalingServer extends DurableObject {
   private sessions: Map<string, { ws: WebSocket; connectionId: string }> = new Map();
   // Track current mute state so new users can learn existing statuses
   private muteStates: Map<string, boolean> = new Map();
+  private beatState: BeatRoomState = createDefaultBeatState();
   private rateLimits: Map<string, { count: number; windowStart: number }> = new Map();
   private static readonly RATE_LIMIT_WINDOW_MS = 10_000;
   private static readonly RATE_LIMIT_MAX = 80;
@@ -117,6 +165,7 @@ export class SignalingServer extends DurableObject {
           this.broadcastUserJoined(clientId);
           console.log(`User joined: ${clientId}`);
           this.sendExistingMuteStates(ws);
+          this.sendBeatState(ws);
         } else if (["offer", "answer", "ice-candidate"].includes(message.type)) {
            // Relay message
            if ('targetClientId' in message) {
@@ -133,6 +182,70 @@ export class SignalingServer extends DurableObject {
           }
           this.muteStates.set(message.senderClientId, message.muted);
           this.broadcastMuteState(message.senderClientId, message.muted);
+        } else if (message.type === "beat-set-pattern") {
+          if (clientId && !this.consumeRateLimit(clientId)) {
+            ws.close(4410, "rate-limit");
+            return;
+          }
+          this.beatState = {
+            ...this.beatState,
+            bpm: message.bpm,
+            steps: cloneBeatGrid(message.steps),
+            presetId: message.presetId,
+            updatedAtMs: Date.now(),
+            updatedBy: message.senderClientId,
+          };
+          this.broadcastBeatState();
+        } else if (message.type === "beat-play") {
+          if (clientId && !this.consumeRateLimit(clientId)) {
+            ws.close(4410, "rate-limit");
+            return;
+          }
+          this.beatState = {
+            ...this.beatState,
+            isPlaying: true,
+            startedAtMs: Date.now() + 1200,
+            updatedAtMs: Date.now(),
+            updatedBy: message.senderClientId,
+          };
+          this.broadcastBeatState();
+        } else if (message.type === "room-mode-set") {
+          if (clientId && !this.consumeRateLimit(clientId)) {
+            ws.close(4410, "rate-limit");
+            return;
+          }
+          this.beatState = {
+            ...this.beatState,
+            mode: message.mode,
+            isPlaying: message.mode === "talk" ? false : this.beatState.isPlaying,
+            startedAtMs: message.mode === "talk" ? null : this.beatState.startedAtMs,
+            updatedAtMs: Date.now(),
+            updatedBy: message.senderClientId,
+          };
+          this.broadcastBeatState();
+        } else if (message.type === "beat-stop") {
+          if (clientId && !this.consumeRateLimit(clientId)) {
+            ws.close(4410, "rate-limit");
+            return;
+          }
+          this.beatState = {
+            ...this.beatState,
+            isPlaying: false,
+            startedAtMs: null,
+            updatedAtMs: Date.now(),
+            updatedBy: message.senderClientId,
+          };
+          this.broadcastBeatState();
+        } else if (message.type === "beat-sync-request") {
+          const serverReceivedAtMs = Date.now();
+          ws.send(
+            JSON.stringify({
+              type: "beat-sync-response",
+              clientSentAtMs: message.clientSentAtMs,
+              serverReceivedAtMs,
+              serverSentAtMs: Date.now(),
+            }),
+          );
         }
 
       } catch (err) {
@@ -220,6 +333,33 @@ export class SignalingServer extends DurableObject {
         targetWs.send(JSON.stringify({ type: "mute-state", senderClientId: id, muted }));
       } catch (e) {
         // if we fail to send, let the regular message handlers deal with cleanup
+      }
+    }
+  }
+
+  private createBeatStateMessage() {
+    return JSON.stringify({
+      type: "beat-state",
+      state: this.beatState,
+      serverNowMs: Date.now(),
+    });
+  }
+
+  private sendBeatState(targetWs: WebSocket) {
+    try {
+      targetWs.send(this.createBeatStateMessage());
+    } catch {
+      // let normal socket lifecycle clean up failures
+    }
+  }
+
+  private broadcastBeatState() {
+    const message = this.createBeatStateMessage();
+    for (const [id, entry] of this.sessions) {
+      try {
+        entry.ws.send(message);
+      } catch {
+        this.sessions.delete(id);
       }
     }
   }
